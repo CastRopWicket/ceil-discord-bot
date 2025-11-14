@@ -304,6 +304,3 @@ async def purge(ctx: commands.Context, amount: int):
 # =========================
 if __name__ == "__main__":
     bot.run(DISCORD_TOKEN)
-
-discord.py==2.4.0
-openai>=1.0.0
