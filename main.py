@@ -5,48 +5,8 @@ from datetime import datetime, timedelta
 
 import discord
 from discord.ext import commands, tasks
+from discord import app_commands
 from openai import OpenAI
-import os
-import json
-# ... your other imports are already there (discord, commands, tasks, OpenAI, etc.)
-
-CONFIG_FILE = "config.json"
-
-DEFAULT_CONFIG = {
-    "ai_enabled": True,
-    "moderation_enabled": True,
-    "spam_protection": True,
-    "link_blocking": True,
-    "daily_summary": True,
-    "weekly_summary": True,
-    "xp_enabled": True,
-    "ai_default_mode": "ceil",
-    "banned_words": ["fuck", "shit", "bitch"]
-}
-
-config: dict = {}
-BANNED_WORDS: list[str] = DEFAULT_CONFIG["banned_words"]
-
-def load_config():
-    global config, BANNED_WORDS
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                config = json.load(f)
-        except Exception:
-            config = DEFAULT_CONFIG.copy()
-    else:
-        config = DEFAULT_CONFIG.copy()
-
-    # ensure all keys exist
-    for k, v in DEFAULT_CONFIG.items():
-        config.setdefault(k, v)
-
-    BANNED_WORDS = config.get("banned_words", DEFAULT_CONFIG["banned_words"])
-
-def save_config():
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2)
 
 # =========================
 # ENV & CLIENTS
@@ -69,6 +29,50 @@ intents.guilds = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # =========================
+# CONFIG SYSTEM
+# =========================
+CONFIG_FILE = "config.json"
+
+DEFAULT_CONFIG = {
+    "ai_enabled": True,
+    "moderation_enabled": True,
+    "spam_protection": True,
+    "link_blocking": True,
+    "daily_summary": True,
+    "weekly_summary": True,
+    "xp_enabled": True,
+    "ai_default_mode": "ceil",
+    "banned_words": ["fuck", "shit", "bitch"]
+}
+
+config: dict = {}
+BANNED_WORDS: list[str] = DEFAULT_CONFIG["banned_words"]
+
+
+def load_config():
+    global config, BANNED_WORDS
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        except Exception:
+            config = DEFAULT_CONFIG.copy()
+    else:
+        config = DEFAULT_CONFIG.copy()
+
+    # Ensure all keys exist
+    for k, v in DEFAULT_CONFIG.items():
+        config.setdefault(k, v)
+
+    BANNED_WORDS = config.get("banned_words", DEFAULT_CONFIG["banned_words"])
+
+
+def save_config():
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+
+
+# =========================
 # GLOBAL CONFIG
 # =========================
 LOG_CHANNEL_NAME = "ceil-logs"
@@ -76,14 +80,9 @@ WELCOME_CHANNEL_NAME = "welcome"
 TICKETS_CHANNEL_NAME = "tickets"
 MUTED_ROLE_NAME = "Muted"
 
-# channels where AI is naturally active (plus any channel with a mode set)
 DEFAULT_AI_CHANNEL_NAMES = ["ceil-assistant", "coordination-hub", "academic-assistant"]
 
-# roles that count as staff for moderation
 STAFF_ROLES = {"Coordinator", "Deputy Coordinator", "Moderator"}
-
-# banned words for auto-moderation
-BANNED_WORDS = ["fuck", "shit", "bitch"]  # edit for your context
 
 # spam protection settings
 SPAM_WINDOW_SECONDS = 8
@@ -103,7 +102,7 @@ AI_MODES = {
     "admin": "You are in Admin Mode. Focus on formal emails, reports, policies, procedures, and institutional communication.",
     "general": "You are in General Knowledge Mode. You can talk about any safe topic: history, science, technology, culture, etc.",
     "fun": "You are in Fun Mode. Remain polite and safe, but slightly more relaxed, conversational, and playful.",
-    # topic:<something> will be generated dynamically
+    # topic:<something> generated dynamically
 }
 
 BASE_SYSTEM_PROMPT = """
@@ -126,18 +125,17 @@ Rules:
 - Do not invent real personal data. Stay within safe, non-harmful topics.
 """
 
+
 def build_system_prompt(mode: str) -> str:
     """Return system prompt combining base prompt and mode-specific instructions."""
-    mode = (mode or "ceil").lower()
+    mode = (mode or config.get("ai_default_mode", "ceil")).lower()
     if mode.startswith("topic:"):
         topic = mode.split(":", 1)[1].strip() or "general conversation"
         extra = f"You are in Topic Mode about '{topic}'. Stay mostly on this topic unless the user clearly changes it."
     else:
-        extra = AI_MODES.get(
-            mode,
-            AI_MODES["ceil"]
-        )
+        extra = AI_MODES.get(mode, AI_MODES["ceil"])
     return BASE_SYSTEM_PROMPT + "\n\n" + extra
+
 
 async def ask_ceil_assistant(user_message: str, user_name: str, mode: str) -> str:
     system_prompt = build_system_prompt(mode)
@@ -151,11 +149,13 @@ async def ask_ceil_assistant(user_message: str, user_name: str, mode: str) -> st
     )
     return resp.choices[0].message.content.strip()
 
+
 # =========================
 # XP / LEVEL SYSTEM
 # =========================
 XP_FILE = "xp_data.json"
 xp_data = {}  # {user_id: {"xp": int, "level": int}}
+
 
 def load_xp():
     global xp_data
@@ -165,9 +165,11 @@ def load_xp():
     else:
         xp_data = {}
 
+
 def save_xp():
     with open(XP_FILE, "w", encoding="utf-8") as f:
         json.dump(xp_data, f, indent=2)
+
 
 def add_xp(user_id: int, amount: int = 10):
     uid = str(user_id)
@@ -186,19 +188,22 @@ def add_xp(user_id: int, amount: int = 10):
     save_xp()
     return leveled_up, xp_data[uid]["level"]
 
+
 # =========================
-# MODERATION HELPERS
+# TRACKING / HELPERS
 # =========================
 def is_staff(member: discord.Member) -> bool:
     return any(r.name in STAFF_ROLES for r in member.roles)
 
-async def get_log_channel(guild: discord.Guild):
+
+async def get_log_channel(guild: discord.Guild | None):
     if guild is None:
         return None
     for ch in guild.text_channels:
         if ch.name == LOG_CHANNEL_NAME:
             return ch
     return None
+
 
 # spam tracking: {guild_id: {user_id: [timestamps]}}
 spam_tracker: dict[int, dict[int, list[float]]] = {}
@@ -213,7 +218,8 @@ messages_today: dict[int, int] = {}        # guild_id -> count
 new_members_today: dict[int, int] = {}     # guild_id -> count
 last_stats_reset_date: dict[int, datetime.date] = {}
 
-def track_daily_message(guild: discord.Guild):
+
+def track_daily_message(guild: discord.Guild | None):
     if not guild:
         return
     gid = guild.id
@@ -224,7 +230,8 @@ def track_daily_message(guild: discord.Guild):
         new_members_today[gid] = new_members_today.get(gid, 0)
     messages_today[gid] = messages_today.get(gid, 0) + 1
 
-def track_new_member(guild: discord.Guild):
+
+def track_new_member(guild: discord.Guild | None):
     if not guild:
         return
     gid = guild.id
@@ -235,15 +242,30 @@ def track_new_member(guild: discord.Guild):
         new_members_today[gid] = 0
     new_members_today[gid] = new_members_today.get(gid, 0) + 1
 
+
 # =========================
 # BOT EVENTS
 # =========================
 @bot.event
 async def on_ready():
     load_xp()
+    load_config()
     print(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
-    print("CEIL Assistant MEGA PACK is online.")
-    hourly_tasks.start()
+    print("CEIL Assistant MEGA PACK + Admin Panel is online.")
+    try:
+        # add admin command group then sync
+        bot.tree.add_command(admin_group, override=True)
+    except Exception:
+        # already added
+        pass
+    try:
+        await bot.tree.sync()
+        print("Slash commands synced.")
+    except Exception as e:
+        print("Error syncing slash commands:", e)
+    if not hourly_tasks.is_running():
+        hourly_tasks.start()
+
 
 @bot.event
 async def on_member_join(member: discord.Member):
@@ -255,6 +277,7 @@ async def on_member_join(member: discord.Member):
             f"Please introduce yourself and indicate your levels/groups (e.g. N4 G3, N5 G2)."
         )
         await channel.send(msg)
+
 
 @bot.event
 async def on_message(message: discord.Message):
@@ -271,35 +294,38 @@ async def on_message(message: discord.Message):
 
     guild = message.guild
     author = message.author
+    content_raw = message.content
+    msg_lower = content_raw.lower()
 
     # ======================
     # BASIC MODERATION: BANNED WORDS
     # ======================
-    msg_lower = message.content.lower()
-    if any(bad in msg_lower for bad in BANNED_WORDS):
-        await message.delete()
-        log_ch = await get_log_channel(guild)
-        if log_ch:
-            await log_ch.send(
-                f"🚫 Message deleted from {author.mention} in {message.channel.mention} "
-                f"for banned language.\nContent: `{message.content}`"
-            )
-        return
-
-    # ======================
-    # ANTI-LINK (for non-staff)
-    # ======================
-    link_triggers = ["http://", "https://", "discord.gg/", ".com", ".net", ".org"]
-    if not author.bot and not is_staff(author):
-        if any(t in msg_lower for t in link_triggers):
+    if config.get("moderation_enabled", True):
+        if any(bad in msg_lower for bad in BANNED_WORDS):
             await message.delete()
             log_ch = await get_log_channel(guild)
             if log_ch:
                 await log_ch.send(
-                    f"🔗 Auto-deleted link from {author.mention} in {message.channel.mention}.\n"
-                    f"Content: `{message.content}`"
+                    f"🚫 Message deleted from {author.mention} in {message.channel.mention} "
+                    f"for banned language.\nContent: `{content_raw}`"
                 )
             return
+
+    # ======================
+    # ANTI-LINK (for non-staff)
+    # ======================
+    if config.get("moderation_enabled", True) and config.get("link_blocking", True):
+        link_triggers = ["http://", "https://", "discord.gg/", ".com", ".net", ".org"]
+        if not author.bot and not is_staff(author):
+            if any(t in msg_lower for t in link_triggers):
+                await message.delete()
+                log_ch = await get_log_channel(guild)
+                if log_ch:
+                    await log_ch.send(
+                        f"🔗 Auto-deleted link from {author.mention} in {message.channel.mention}.\n"
+                        f"Content: `{content_raw}`"
+                    )
+                return
 
     # ======================
     # SLOWMODE
@@ -309,66 +335,67 @@ async def on_message(message: discord.Message):
         if ch_id in slowmode_settings:
             delay = slowmode_settings[ch_id]
             key = (ch_id, author.id)
-            now = datetime.utcnow().timestamp()
+            now_ts = datetime.utcnow().timestamp()
             last = last_message_time.get(key, 0)
-            if now - last < delay and not is_staff(author):
-                # Too fast -> delete
+            if now_ts - last < delay and not is_staff(author):
                 await message.delete()
                 try:
-                    await message.author.send(
+                    await author.send(
                         f"You are sending messages too quickly in {message.channel.mention}. "
                         f"Slowmode is set to {delay} seconds."
                     )
                 except Exception:
                     pass
                 return
-            last_message_time[key] = now
+            last_message_time[key] = now_ts
 
     # ======================
     # ANTI-SPAM
     # ======================
-    if not author.bot:
-        gid = guild.id
-        uid = author.id
-        now = datetime.utcnow().timestamp()
-        if gid not in spam_tracker:
-            spam_tracker[gid] = {}
-        if uid not in spam_tracker[gid]:
-            spam_tracker[gid][uid] = []
-        spam_tracker[gid][uid].append(now)
-        # keep only last SPAM_WINDOW_SECONDS
-        spam_tracker[gid][uid] = [
-            t for t in spam_tracker[gid][uid] if now - t <= SPAM_WINDOW_SECONDS
-        ]
-        if len(spam_tracker[gid][uid]) >= SPAM_MAX_MESSAGES and not is_staff(author):
-            # auto-mute
-            muted_role = discord.utils.get(guild.roles, name=MUTED_ROLE_NAME)
-            if not muted_role:
-                muted_role = await guild.create_role(name=MUTED_ROLE_NAME)
-                for channel in guild.channels:
-                    await channel.set_permissions(muted_role, send_messages=False, speak=False)
-            await author.add_roles(muted_role)
-            log_ch = await get_log_channel(guild)
-            if log_ch:
-                await log_ch.send(
-                    f"🤖 Auto-muted {author.mention} for spam in {message.channel.mention} "
-                    f"for {AUTO_MUTE_MINUTES} minutes."
-                )
+    if config.get("moderation_enabled", True) and config.get("spam_protection", True):
+        if not author.bot:
+            gid = guild.id
+            uid = author.id
+            now_ts = datetime.utcnow().timestamp()
+            if gid not in spam_tracker:
+                spam_tracker[gid] = {}
+            if uid not in spam_tracker[gid]:
+                spam_tracker[gid][uid] = []
+            spam_tracker[gid][uid].append(now_ts)
+            # keep only last SPAM_WINDOW_SECONDS
+            spam_tracker[gid][uid] = [
+                t for t in spam_tracker[gid][uid] if now_ts - t <= SPAM_WINDOW_SECONDS
+            ]
+            if len(spam_tracker[gid][uid]) >= SPAM_MAX_MESSAGES and not is_staff(author):
+                # auto-mute
+                muted_role = discord.utils.get(guild.roles, name=MUTED_ROLE_NAME)
+                if not muted_role:
+                    muted_role = await guild.create_role(name=MUTED_ROLE_NAME)
+                    for channel in guild.channels:
+                        await channel.set_permissions(muted_role, send_messages=False, speak=False)
+                await author.add_roles(muted_role)
+                log_ch = await get_log_channel(guild)
+                if log_ch:
+                    await log_ch.send(
+                        f"🤖 Auto-muted {author.mention} for spam in {message.channel.mention} "
+                        f"for {AUTO_MUTE_MINUTES} minutes."
+                    )
 
-            async def unmute_later():
-                await asyncio.sleep(AUTO_MUTE_MINUTES * 60)
-                if muted_role in author.roles:
-                    await author.remove_roles(muted_role)
-                    if log_ch:
-                        await log_ch.send(
-                            f"🔈 Auto-unmuted {author.mention} after spam timeout."
-                        )
-            bot.loop.create_task(unmute_later())
+                async def unmute_later():
+                    await asyncio.sleep(AUTO_MUTE_MINUTES * 60)
+                    if muted_role in author.roles:
+                        await author.remove_roles(muted_role)
+                        if log_ch:
+                            await log_ch.send(
+                                f"🔈 Auto-unmuted {author.mention} after spam timeout."
+                            )
+
+                bot.loop.create_task(unmute_later())
 
     # ======================
     # XP / LEVEL UP
     # ======================
-    if not author.bot and len(message.content.strip()) > 2:
+    if config.get("xp_enabled", True) and not author.bot and len(content_raw.strip()) > 2:
         track_daily_message(guild)
         leveled_up, new_level = add_xp(author.id)
         if leveled_up:
@@ -379,29 +406,30 @@ async def on_message(message: discord.Message):
     # ======================
     # AI ASSISTANT TRIGGER
     # ======================
+    if not config.get("ai_enabled", True):
+        return
+
     channel_name = getattr(message.channel, "name", "").lower()
     mentioned = bot.user.mentioned_in(message)
 
-    # AI channel if:
-    # - channel has a mode set, OR
-    # - channel is in default AI list, OR
-    # - bot is mentioned
-    mode_for_channel = channel_modes.get(message.channel.id)
+    mode_for_channel = channel_modes.get(
+        message.channel.id,
+        config.get("ai_default_mode", "ceil"),
+    )
     in_default_ai = channel_name in DEFAULT_AI_CHANNEL_NAMES
-    should_ai_reply = mentioned or in_default_ai or (mode_for_channel is not None)
+    should_ai_reply = mentioned or in_default_ai or (message.channel.id in channel_modes)
 
     if should_ai_reply:
-        content = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+        content = content_raw.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
         if not content:
             content = "The user mentioned you but wrote nothing else. Ask them what they need."
 
-        mode = mode_for_channel or "ceil"
-
         await message.channel.typing()
-        reply = await ask_ceil_assistant(content, user_name=str(author), mode=mode)
+        reply = await ask_ceil_assistant(content, user_name=str(author), mode=mode_for_channel)
         if len(reply) > 1900:
             reply = reply[:1900] + "\n\n[Truncated reply]"
         await message.reply(reply, mention_author=False)
+
 
 # =========================
 # BACKGROUND TASKS
@@ -409,15 +437,19 @@ async def on_message(message: discord.Message):
 @tasks.loop(minutes=60)
 async def hourly_tasks():
     """Runs every hour: daily + weekly reminders & summaries."""
+    if not bot.is_ready():
+        return
+
     now = datetime.utcnow()
     for guild in bot.guilds:
         coord_channel = discord.utils.get(guild.text_channels, name="coordination-hub")
         if coord_channel is None:
             continue
 
-        # Daily reminder around 20:00 UTC
-        if now.hour == 20:
-            gid = guild.id
+        gid = guild.id
+
+        # Daily summary around 20:00 UTC
+        if config.get("daily_summary", True) and now.hour == 20:
             msgs = messages_today.get(gid, 0)
             joins = new_members_today.get(gid, 0)
             text = (
@@ -430,37 +462,46 @@ async def hourly_tasks():
             await coord_channel.send(text)
 
         # Weekly note on Friday (weekday=4) at 18:00 UTC
-        if now.weekday() == 4 and now.hour == 18:
+        if config.get("weekly_summary", True) and now.weekday() == 4 and now.hour == 18:
             text = (
                 "🗓 **Weekly CEIL Coordination Reminder**\n"
                 "- Check progression for N1–N8.\n"
                 "- Identify weak groups (attendance, grammar, reading).\n"
-                "- Prepare any issues to raise in the next coordination meeting.\n"
+                "- Prepare issues to raise in the next coordination meeting.\n"
                 "- Update reports and Drive folders accordingly.\n"
             )
             await coord_channel.send(text)
 
+
 # =========================
-# COMMANDS – AI
+# TEXT COMMANDS (PREFIX !)
 # =========================
 @bot.command(name="ceil")
 async def ceil_command(ctx: commands.Context, *, query: str):
     """Manual AI call: !ceil <your text>"""
-    mode = channel_modes.get(ctx.channel.id, "ceil")
+    if not config.get("ai_enabled", True):
+        return await ctx.reply("AI is currently disabled by the coordinator.", mention_author=False)
+
+    mode = channel_modes.get(
+        ctx.channel.id,
+        config.get("ai_default_mode", "ceil"),
+    )
     await ctx.trigger_typing()
     reply = await ask_ceil_assistant(query, user_name=str(ctx.author), mode=mode)
     if len(reply) > 1900:
         reply = reply[:1900] + "\n\n[Truncated reply]"
     await ctx.reply(reply, mention_author=False)
 
+
 @bot.command(name="ping")
 async def ping(ctx: commands.Context):
     await ctx.reply(f"Pong! Latency: {round(bot.latency * 1000)} ms", mention_author=False)
 
+
 @bot.command(name="helpceil")
 async def helpceil(ctx: commands.Context):
     text = (
-        "**CEIL Assistant – MEGA PACK Help**\n\n"
+        "**CEIL Assistant – MEGA PACK + Admin Panel**\n\n"
         "__AI / Coordination__\n"
         "`!ceil <text>` – Ask the CEIL AI assistant.\n"
         "Mention the bot or use AI channels to chat with it.\n"
@@ -476,12 +517,19 @@ async def helpceil(ctx: commands.Context):
         "`!ticket <issue>` – Create a ticket in #tickets.\n\n"
         "__Levels / XP__\n"
         "XP is gained automatically by sending messages.\n"
-        "Level-ups are announced automatically.\n"
+        "Level-ups are announced automatically.\n\n"
+        "__Slash Admin__ (Coordinator only)\n"
+        "`/admin toggle` – Turn features on/off.\n"
+        "`/admin mode` – Set default AI mode.\n"
+        "`/admin bannedwords` – Manage banned words.\n"
+        "`/admin config` – Show settings.\n"
+        "`/admin reload` – Reload config.json.\n"
     )
     await ctx.reply(text, mention_author=False)
 
+
 # =========================
-# COMMANDS – MODERATION
+# TEXT COMMANDS – MODERATION
 # =========================
 @bot.command(name="warn")
 async def warn(ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided"):
@@ -493,6 +541,7 @@ async def warn(ctx: commands.Context, member: discord.Member, *, reason: str = "
     await ctx.send(msg)
     if log_ch:
         await log_ch.send(msg)
+
 
 @bot.command(name="mute")
 async def mute(ctx: commands.Context, member: discord.Member, minutes: int = 10):
@@ -518,7 +567,9 @@ async def mute(ctx: commands.Context, member: discord.Member, minutes: int = 10)
             await member.remove_roles(muted_role)
             if log_ch:
                 await log_ch.send(f"🔈 {member} has been automatically unmuted.")
+
     bot.loop.create_task(unmute_later())
+
 
 @bot.command(name="unmute")
 async def unmute(ctx: commands.Context, member: discord.Member):
@@ -531,6 +582,7 @@ async def unmute(ctx: commands.Context, member: discord.Member):
         await ctx.send(f"🔈 {member.mention} has been unmuted.")
     else:
         await ctx.send("User is not muted.")
+
 
 @bot.command(name="purge")
 async def purge(ctx: commands.Context, amount: int):
@@ -545,6 +597,7 @@ async def purge(ctx: commands.Context, amount: int):
         await log_ch.send(
             f"🧹 {ctx.author.mention} purged {len(deleted)-1} messages in {ctx.channel.mention}."
         )
+
 
 @bot.command(name="slowmode")
 async def slowmode(ctx: commands.Context, setting: str):
@@ -565,6 +618,7 @@ async def slowmode(ctx: commands.Context, setting: str):
 
         slowmode_settings[ch_id] = seconds
         await ctx.send(f"⏱ Slowmode set to {seconds} seconds for this channel.")
+
 
 @bot.command(name="ticket")
 async def ticket(ctx: commands.Context, *, issue: str):
@@ -588,8 +642,9 @@ async def ticket(ctx: commands.Context, *, issue: str):
     await tickets_ch.send(embed=embed)
     await ctx.reply("✅ Your ticket has been created. The coordination team will review it.", mention_author=False)
 
+
 # =========================
-# COMMANDS – AI MODES
+# TEXT COMMANDS – AI MODES
 # =========================
 @bot.command(name="mode")
 async def mode(ctx: commands.Context, *, mode_name: str):
@@ -613,10 +668,12 @@ async def mode(ctx: commands.Context, *, mode_name: str):
     channel_modes[ctx.channel.id] = mode_key
     await ctx.reply(f"✅ AI mode for this channel set to **{mode_key}**.", mention_author=False)
 
+
 @bot.command(name="currentmode")
 async def currentmode(ctx: commands.Context):
-    mode = channel_modes.get(ctx.channel.id, "ceil")
+    mode = channel_modes.get(ctx.channel.id, config.get("ai_default_mode", "ceil"))
     await ctx.reply(f"The AI mode for this channel is **{mode}**.", mention_author=False)
+
 
 @bot.command(name="modes")
 async def modes(ctx: commands.Context):
@@ -630,8 +687,149 @@ async def modes(ctx: commands.Context):
     )
     await ctx.reply(text, mention_author=False)
 
+
+# =========================
+# SLASH ADMIN PANEL (/admin ...)
+# =========================
+FEATURE_KEYS = {
+    "ai": "ai_enabled",
+    "moderation": "moderation_enabled",
+    "spam": "spam_protection",
+    "links": "link_blocking",
+    "daily": "daily_summary",
+    "weekly": "weekly_summary",
+    "xp": "xp_enabled",
+}
+
+
+class AdminGroup(app_commands.Group):
+    def __init__(self):
+        super().__init__(name="admin", description="Admin controls for the CEIL bot.")
+
+
+admin_group = AdminGroup()
+
+
+@admin_group.command(name="toggle", description="Toggle a feature on or off (Coordinator only).")
+@app_commands.describe(
+    feature="ai / moderation / spam / links / daily / weekly / xp",
+    state="true = on, false = off"
+)
+async def admin_toggle(interaction: discord.Interaction, feature: str, state: bool):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not is_staff(user):
+        await interaction.response.send_message("❌ You are not authorized to use this command.", ephemeral=True)
+        return
+
+    key = FEATURE_KEYS.get(feature.lower())
+    if not key:
+        await interaction.response.send_message(
+            "Unknown feature. Use: ai, moderation, spam, links, daily, weekly, xp.",
+            ephemeral=True
+        )
+        return
+
+    config[key] = state
+    save_config()
+    await interaction.response.send_message(
+        f"✅ `{feature}` has been set to **{state}**.",
+        ephemeral=True
+    )
+
+
+@admin_group.command(name="mode", description="Set default AI mode for new channels.")
+@app_commands.describe(mode="ceil / education / admin / general / fun")
+async def admin_mode(interaction: discord.Interaction, mode: str):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not is_staff(user):
+        await interaction.response.send_message("❌ You are not authorized.", ephemeral=True)
+        return
+
+    mode = mode.lower()
+    valid_modes = ["ceil", "education", "admin", "general", "fun"]
+    if mode not in valid_modes:
+        await interaction.response.send_message(
+            f"Mode must be one of: {', '.join(valid_modes)}.",
+            ephemeral=True
+        )
+        return
+
+    config["ai_default_mode"] = mode
+    save_config()
+    await interaction.response.send_message(
+        f"✅ Default AI mode set to **{mode}**.",
+        ephemeral=True
+    )
+
+
+@admin_group.command(name="bannedwords", description="Add or remove banned words (Coordinator only).")
+@app_commands.describe(action="add or remove", word="The word to add/remove")
+async def admin_bannedwords(interaction: discord.Interaction, action: str, word: str):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not is_staff(user):
+        await interaction.response.send_message("❌ You are not authorized.", ephemeral=True)
+        return
+
+    action = action.lower()
+    word = word.lower().strip()
+    banned = config.get("banned_words", [])
+
+    if action == "add":
+        if word not in banned:
+            banned.append(word)
+            config["banned_words"] = banned
+            save_config()
+            load_config()
+            await interaction.response.send_message(f"✅ Added `{word}` to banned words.", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"`{word}` is already banned.", ephemeral=True)
+    elif action == "remove":
+        if word in banned:
+            banned.remove(word)
+            config["banned_words"] = banned
+            save_config()
+            load_config()
+            await interaction.response.send_message(f"✅ Removed `{word}` from banned words.", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"`{word}` is not in the banned list.", ephemeral=True)
+    else:
+        await interaction.response.send_message(
+            "Action must be `add` or `remove`.",
+            ephemeral=True
+        )
+
+
+@admin_group.command(name="config", description="Show current bot configuration.")
+async def admin_config(interaction: discord.Interaction):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not is_staff(user):
+        await interaction.response.send_message("❌ You are not authorized.", ephemeral=True)
+        return
+
+    lines = []
+    for k, v in config.items():
+        if k == "banned_words":
+            lines.append(f"- {k}: {', '.join(v)}")
+        else:
+            lines.append(f"- {k}: {v}")
+    txt = "**Current CEIL Bot Configuration:**\n" + "\n".join(lines)
+    await interaction.response.send_message(txt, ephemeral=True)
+
+
+@admin_group.command(name="reload", description="Reload config.json from disk.")
+async def admin_reload(interaction: discord.Interaction):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not is_staff(user):
+        await interaction.response.send_message("❌ You are not authorized.", ephemeral=True)
+        return
+
+    load_config()
+    await interaction.response.send_message("✅ Config reloaded from file.", ephemeral=True)
+
+
 # =========================
 # RUN BOT
 # =========================
 if __name__ == "__main__":
+    load_config()
     bot.run(DISCORD_TOKEN)
