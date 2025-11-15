@@ -1,0 +1,11 @@
+{
+  "ai_enabled": true,
+  "moderation_enabled": true,
+  "spam_protection": true,
+  "link_blocking": true,
+  "daily_summary": true,
+  "weekly_summary": true,
+  "xp_enabled": true,
+  "ai_default_mode": "ceil",
+  "banned_words": ["fuck", "shit", "bitch"]
+}
