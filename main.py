@@ -6,6 +6,47 @@ from datetime import datetime, timedelta
 import discord
 from discord.ext import commands, tasks
 from openai import OpenAI
+import os
+import json
+# ... your other imports are already there (discord, commands, tasks, OpenAI, etc.)
+
+CONFIG_FILE = "config.json"
+
+DEFAULT_CONFIG = {
+    "ai_enabled": True,
+    "moderation_enabled": True,
+    "spam_protection": True,
+    "link_blocking": True,
+    "daily_summary": True,
+    "weekly_summary": True,
+    "xp_enabled": True,
+    "ai_default_mode": "ceil",
+    "banned_words": ["fuck", "shit", "bitch"]
+}
+
+config: dict = {}
+BANNED_WORDS: list[str] = DEFAULT_CONFIG["banned_words"]
+
+def load_config():
+    global config, BANNED_WORDS
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        except Exception:
+            config = DEFAULT_CONFIG.copy()
+    else:
+        config = DEFAULT_CONFIG.copy()
+
+    # ensure all keys exist
+    for k, v in DEFAULT_CONFIG.items():
+        config.setdefault(k, v)
+
+    BANNED_WORDS = config.get("banned_words", DEFAULT_CONFIG["banned_words"])
+
+def save_config():
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
 
 # =========================
 # ENV & CLIENTS
