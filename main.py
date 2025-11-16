@@ -41,7 +41,12 @@ DEFAULT_CONFIG = {
     "daily_summary": True,
     "weekly_summary": True,
     "xp_enabled": True,
+    "logging_enabled": True,
+    "tickets_enabled": True,
+    "polls_enabled": True,
+    "reminders_enabled": True,
     "ai_default_mode": "ceil",
+    "auto_role_name": "Teacher",
     "banned_words": ["fuck", "shit", "bitch"]
 }
 
@@ -73,7 +78,7 @@ def save_config():
 
 
 # =========================
-# GLOBAL CONFIG
+# GLOBAL CONFIG / CONSTANTS
 # =========================
 LOG_CHANNEL_NAME = "ceil-logs"
 WELCOME_CHANNEL_NAME = "welcome"
@@ -84,7 +89,7 @@ DEFAULT_AI_CHANNEL_NAMES = ["ceil-assistant", "coordination-hub", "academic-assi
 
 STAFF_ROLES = {"Coordinator", "Deputy Coordinator", "Moderator"}
 
-# spam protection settings
+# spam protection
 SPAM_WINDOW_SECONDS = 8
 SPAM_MAX_MESSAGES = 7
 AUTO_MUTE_MINUTES = 15
@@ -189,6 +194,21 @@ def add_xp(user_id: int, amount: int = 10):
     return leveled_up, xp_data[uid]["level"]
 
 
+def get_profile(user_id: int):
+    uid = str(user_id)
+    data = xp_data.get(uid, {"xp": 0, "level": 1})
+    return data["xp"], data["level"]
+
+
+def get_leaderboard(limit: int = 10):
+    entries = [
+        (int(uid), data.get("xp", 0), data.get("level", 1))
+        for uid, data in xp_data.items()
+    ]
+    entries.sort(key=lambda x: x[1], reverse=True)
+    return entries[:limit]
+
+
 # =========================
 # TRACKING / HELPERS
 # =========================
@@ -198,6 +218,8 @@ def is_staff(member: discord.Member) -> bool:
 
 async def get_log_channel(guild: discord.Guild | None):
     if guild is None:
+        return None
+    if not config.get("logging_enabled", True):
         return None
     for ch in guild.text_channels:
         if ch.name == LOG_CHANNEL_NAME:
@@ -251,12 +273,10 @@ async def on_ready():
     load_xp()
     load_config()
     print(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
-    print("CEIL Assistant MEGA PACK + Admin Panel is online.")
+    print("CEIL Assistant – Advanced Version with Admin Panel is online.")
     try:
-        # add admin command group then sync
         bot.tree.add_command(admin_group, override=True)
     except Exception:
-        # already added
         pass
     try:
         await bot.tree.sync()
@@ -270,6 +290,7 @@ async def on_ready():
 @bot.event
 async def on_member_join(member: discord.Member):
     track_new_member(member.guild)
+    # Welcome message
     channel = discord.utils.get(member.guild.text_channels, name=WELCOME_CHANNEL_NAME)
     if channel:
         msg = (
@@ -278,6 +299,53 @@ async def on_member_join(member: discord.Member):
         )
         await channel.send(msg)
 
+    # Auto-role
+    auto_role_name = config.get("auto_role_name")
+    if auto_role_name:
+        role = discord.utils.get(member.guild.roles, name=auto_role_name)
+        if role:
+            try:
+                await member.add_roles(role)
+            except Exception:
+                pass
+
+    # Log join
+    log_ch = await get_log_channel(member.guild)
+    if log_ch:
+        await log_ch.send(f"✅ Member joined: {member} ({member.id})")
+
+
+@bot.event
+async def on_member_remove(member: discord.Member):
+    log_ch = await get_log_channel(member.guild)
+    if log_ch:
+        await log_ch.send(f"🚪 Member left: {member} ({member.id})")
+
+
+@bot.event
+async def on_message_edit(before: discord.Message, after: discord.Message):
+    if not before.guild or before.author.bot:
+        return
+    log_ch = await get_log_channel(before.guild)
+    if log_ch and before.content != after.content:
+        await log_ch.send(
+            f"✏️ Message edited in {before.channel.mention} by {before.author.mention}:\n"
+            f"Before: `{before.content}`\n"
+            f"After: `{after.content}`"
+        )
+
+
+@bot.event
+async def on_message_delete(message: discord.Message):
+    if not message.guild or message.author.bot:
+        return
+    log_ch = await get_log_channel(message.guild)
+    if log_ch:
+        await log_ch.send(
+            f"🗑 Message deleted in {message.channel.mention} by {message.author.mention}:\n"
+            f"Content: `{message.content}`"
+        )
+
 
 @bot.event
 async def on_message(message: discord.Message):
@@ -285,7 +353,7 @@ async def on_message(message: discord.Message):
     if message.author == bot.user:
         return
 
-    # Let commands work
+    # Let prefix commands work
     await bot.process_commands(message)
 
     # Ignore DMs for moderation/xp/ai
@@ -362,7 +430,6 @@ async def on_message(message: discord.Message):
             if uid not in spam_tracker[gid]:
                 spam_tracker[gid][uid] = []
             spam_tracker[gid][uid].append(now_ts)
-            # keep only last SPAM_WINDOW_SECONDS
             spam_tracker[gid][uid] = [
                 t for t in spam_tracker[gid][uid] if now_ts - t <= SPAM_WINDOW_SECONDS
             ]
@@ -389,7 +456,6 @@ async def on_message(message: discord.Message):
                             await log_ch.send(
                                 f"🔈 Auto-unmuted {author.mention} after spam timeout."
                             )
-
                 bot.loop.create_task(unmute_later())
 
     # ======================
@@ -501,7 +567,7 @@ async def ping(ctx: commands.Context):
 @bot.command(name="helpceil")
 async def helpceil(ctx: commands.Context):
     text = (
-        "**CEIL Assistant – MEGA PACK + Admin Panel**\n\n"
+        "**CEIL Assistant – Advanced Version**\n\n"
         "__AI / Coordination__\n"
         "`!ceil <text>` – Ask the CEIL AI assistant.\n"
         "Mention the bot or use AI channels to chat with it.\n"
@@ -516,14 +582,18 @@ async def helpceil(ctx: commands.Context):
         "`!slowmode <seconds/off>` – Set/disable slowmode.\n"
         "`!ticket <issue>` – Create a ticket in #tickets.\n\n"
         "__Levels / XP__\n"
-        "XP is gained automatically by sending messages.\n"
-        "Level-ups are announced automatically.\n\n"
+        "`!profile` – Show your XP and level.\n"
+        "`!leaderboard` – Show top users.\n\n"
+        "__Reminders__\n"
+        "`!remindme <minutes> <text>` – DM reminder.\n\n"
         "__Slash Admin__ (Coordinator only)\n"
         "`/admin toggle` – Turn features on/off.\n"
         "`/admin mode` – Set default AI mode.\n"
         "`/admin bannedwords` – Manage banned words.\n"
+        "`/admin autorole` – Change auto-role name.\n"
         "`/admin config` – Show settings.\n"
         "`/admin reload` – Reload config.json.\n"
+        "`/poll` – Create polls (if enabled).\n"
     )
     await ctx.reply(text, mention_author=False)
 
@@ -566,8 +636,7 @@ async def mute(ctx: commands.Context, member: discord.Member, minutes: int = 10)
         if muted_role in member.roles:
             await member.remove_roles(muted_role)
             if log_ch:
-                await log_ch.send(f"🔈 {member} has been automatically unmuted.")
-
+                await log_ch.send(f"🔈 {member.mention} has been automatically unmuted.")
     bot.loop.create_task(unmute_later())
 
 
@@ -622,6 +691,9 @@ async def slowmode(ctx: commands.Context, setting: str):
 
 @bot.command(name="ticket")
 async def ticket(ctx: commands.Context, *, issue: str):
+    if not config.get("tickets_enabled", True):
+        return await ctx.reply("Tickets are currently disabled by the coordinator.", mention_author=False)
+
     guild = ctx.guild
     tickets_ch = discord.utils.get(guild.text_channels, name=TICKETS_CHANNEL_NAME)
     if tickets_ch is None:
@@ -689,6 +761,110 @@ async def modes(ctx: commands.Context):
 
 
 # =========================
+# TEXT COMMANDS – XP PROFILE / LEADERBOARD
+# =========================
+@bot.command(name="profile")
+async def profile(ctx: commands.Context, member: discord.Member | None = None):
+    target = member or ctx.author
+    xp, level = get_profile(target.id)
+    embed = discord.Embed(
+        title=f"{target.display_name}'s Profile",
+        color=discord.Color.green(),
+    )
+    embed.add_field(name="Level", value=str(level), inline=True)
+    embed.add_field(name="XP", value=str(xp), inline=True)
+    embed.set_thumbnail(url=target.display_avatar.url if target.display_avatar else discord.Embed.Empty)
+    await ctx.reply(embed=embed, mention_author=False)
+
+
+@bot.command(name="leaderboard")
+async def leaderboard(ctx: commands.Context):
+    lb = get_leaderboard(10)
+    if not lb:
+        return await ctx.reply("No XP data yet.", mention_author=False)
+
+    lines = []
+    for rank, (uid, xp, level) in enumerate(lb, start=1):
+        member = ctx.guild.get_member(uid)
+        name = member.display_name if member else f"User {uid}"
+        lines.append(f"**#{rank}** – {name} | Level {level} | XP {xp}")
+
+    embed = discord.Embed(
+        title="🏆 CEIL XP Leaderboard",
+        description="\n".join(lines),
+        color=discord.Color.gold(),
+    )
+    await ctx.reply(embed=embed, mention_author=False)
+
+
+# =========================
+# TEXT COMMANDS – REMINDERS
+# =========================
+@bot.command(name="remindme")
+async def remindme(ctx: commands.Context, minutes: int, *, text: str):
+    if not config.get("reminders_enabled", True):
+        return await ctx.reply("Reminders are currently disabled by the coordinator.", mention_author=False)
+
+    if minutes <= 0:
+        return await ctx.reply("Minutes must be positive.", mention_author=False)
+
+    await ctx.reply(f"⏰ I will remind you in {minutes} minutes.", mention_author=False)
+
+    async def reminder():
+        await asyncio.sleep(minutes * 60)
+        try:
+            await ctx.author.send(f"⏰ Reminder from CEIL Bot: {text}")
+        except Exception:
+            # fallback: send in channel
+            try:
+                await ctx.channel.send(f"{ctx.author.mention} ⏰ Reminder: {text}")
+            except Exception:
+                pass
+
+    bot.loop.create_task(reminder())
+
+
+# =========================
+# SLASH COMMAND – POLL
+# =========================
+@bot.tree.command(name="poll", description="Create a quick poll (up to 10 options).")
+@app_commands.describe(
+    question="The poll question",
+    options="Options separated by |, e.g. option1 | option2 | option3"
+)
+async def poll_command(interaction: discord.Interaction, question: str, options: str):
+    if not config.get("polls_enabled", True):
+        await interaction.response.send_message("Polls are disabled by the coordinator.", ephemeral=True)
+        return
+
+    opts = [o.strip() for o in options.split("|") if o.strip()]
+    if len(opts) < 2:
+        await interaction.response.send_message("Please provide at least 2 options.", ephemeral=True)
+        return
+    if len(opts) > 10:
+        await interaction.response.send_message("Maximum 10 options allowed.", ephemeral=True)
+        return
+
+    emojis = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟"]
+
+    desc_lines = []
+    for i, opt in enumerate(opts):
+        desc_lines.append(f"{emojis[i]} {opt}")
+
+    embed = discord.Embed(
+        title=f"📊 {question}",
+        description="\n".join(desc_lines),
+        color=discord.Color.blurple()
+    )
+    embed.set_footer(text=f"Poll created by {interaction.user.display_name}")
+    msg = await interaction.channel.send(embed=embed)
+    for i in range(len(opts)):
+        await msg.add_reaction(emojis[i])
+
+    await interaction.response.send_message("✅ Poll created.", ephemeral=True)
+
+
+# =========================
 # SLASH ADMIN PANEL (/admin ...)
 # =========================
 FEATURE_KEYS = {
@@ -699,6 +875,10 @@ FEATURE_KEYS = {
     "daily": "daily_summary",
     "weekly": "weekly_summary",
     "xp": "xp_enabled",
+    "logging": "logging_enabled",
+    "tickets": "tickets_enabled",
+    "polls": "polls_enabled",
+    "reminders": "reminders_enabled",
 }
 
 
@@ -712,7 +892,7 @@ admin_group = AdminGroup()
 
 @admin_group.command(name="toggle", description="Toggle a feature on or off (Coordinator only).")
 @app_commands.describe(
-    feature="ai / moderation / spam / links / daily / weekly / xp",
+    feature="ai / moderation / spam / links / daily / weekly / xp / logging / tickets / polls / reminders",
     state="true = on, false = off"
 )
 async def admin_toggle(interaction: discord.Interaction, feature: str, state: bool):
@@ -724,7 +904,7 @@ async def admin_toggle(interaction: discord.Interaction, feature: str, state: bo
     key = FEATURE_KEYS.get(feature.lower())
     if not key:
         await interaction.response.send_message(
-            "Unknown feature. Use: ai, moderation, spam, links, daily, weekly, xp.",
+            "Unknown feature. Use: ai, moderation, spam, links, daily, weekly, xp, logging, tickets, polls, reminders.",
             ephemeral=True
         )
         return
@@ -797,6 +977,25 @@ async def admin_bannedwords(interaction: discord.Interaction, action: str, word:
             "Action must be `add` or `remove`.",
             ephemeral=True
         )
+
+
+@admin_group.command(name="autorole", description="Set auto-role name for new members.")
+@app_commands.describe(role_name="Exact name of the role to auto-assign (leave empty to disable)")
+async def admin_autorole(interaction: discord.Interaction, role_name: str | None = None):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not is_staff(user):
+        await interaction.response.send_message("❌ You are not authorized.", ephemeral=True)
+        return
+
+    if role_name:
+        config["auto_role_name"] = role_name
+        msg = f"✅ Auto-role set to **{role_name}**."
+    else:
+        config["auto_role_name"] = ""
+        msg = "✅ Auto-role disabled."
+
+    save_config()
+    await interaction.response.send_message(msg, ephemeral=True)
 
 
 @admin_group.command(name="config", description="Show current bot configuration.")
