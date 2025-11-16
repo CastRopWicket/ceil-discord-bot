@@ -1,1 +1,0 @@
-# vision cog placeholder

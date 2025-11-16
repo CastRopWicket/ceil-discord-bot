@@ -1,1 +1,0 @@
-# moderation cog placeholder
