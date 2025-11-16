@@ -436,8 +436,127 @@ def is_link(text: str) -> bool:
     return bool(re.search(pattern, text.lower()))
     
 @bot.event
-async def on_message(msg):
-print(f"MSG RECEIVED: {msg.content}")
+async def on_message(msg: discord.Message):
+
+    # DEBUG — SEE ALL MESSAGES
+    print(f"MSG RECEIVED: {msg.content}")
+
+    # 1. Ignore bot messages
+    if msg.author.bot:
+        return
+
+    guild = msg.guild
+
+    # 2. XP system
+    if config.get("xp_enabled", True):
+        leveled_up, new_level = add_xp(msg.author.id, amount=5)
+        if leveled_up:
+            try:
+                await msg.channel.send(
+                    f"🎉 {msg.author.mention} leveled up! **Level {new_level}!**"
+                )
+            except:
+                pass
+
+    # 3. Moderation
+    if config.get("moderation_enabled", True):
+
+        # safer link detection
+        import re
+        def is_link(text: str):
+            pattern = r"(https?://[^\s]+|discord\.gg/[^\s]+)"
+            return bool(re.search(pattern, text.lower()))
+
+        # banned words
+        lower_text = msg.content.lower()
+        if any(bad in lower_text for bad in BANNED_WORDS):
+            try:
+                await msg.delete()
+            except:
+                pass
+            await log_event(guild, f"🚨 Deleted banned word from {msg.author}")
+            return
+
+        # link filter
+        if is_link(msg.content):
+            if not is_staff(msg.author):
+                try:
+                    await msg.delete()
+                except:
+                    pass
+                await log_event(guild, f"🔗 Blocked link from {msg.author}")
+                return
+
+        # spam tracking
+        now = time.time()
+        gid = guild.id if guild else 0
+        uid = msg.author.id
+
+        if gid not in spam_tracker:
+            spam_tracker[gid] = {}
+        if uid not in spam_tracker[gid]:
+            spam_tracker[gid][uid] = []
+
+        spam_tracker[gid][uid].append(now)
+
+        spam_tracker[gid][uid] = [
+            t for t in spam_tracker[gid][uid]
+            if now - t <= SPAM_WINDOW_SECONDS
+        ]
+
+        if len(spam_tracker[gid][uid]) >= SPAM_MAX_MESSAGES:
+            try:
+                await apply_auto_mute(msg.author, guild, "Auto-spam detection")
+            except:
+                pass
+            return
+
+        # slowmode
+        ch = msg.channel
+        if ch.id in slowmode_settings:
+            delay = slowmode_settings[ch.id]
+            key = (ch.id, uid)
+            last = last_message_time.get(key, 0)
+            if now - last < delay:
+                try:
+                    await msg.delete()
+                except:
+                    pass
+                return
+            last_message_time[key] = now
+
+    # 4. Auto AI conversation
+    if config.get("ai_enabled", True):
+
+        if msg.guild is not None:
+            mode = channel_modes.get(msg.channel.id, config.get("ai_default_mode", "ceil"))
+            content = msg.content.strip()
+
+            # ignore commands
+            if content.startswith("!") or content.startswith("/"):
+                return await bot.process_commands(msg)
+
+            trigger = (
+                msg.channel.name.startswith("ai-") or
+                msg.content.lower().startswith("ceil") or
+                f"<@{bot.user.id}>" in msg.content
+            )
+
+            if trigger:
+                try:
+                    await msg.channel.trigger_typing()
+                except:
+                    pass
+
+                reply = await ai_general_reply(content, str(msg.author), mode)
+                try:
+                    await msg.reply(reply, mention_author=False)
+                except:
+                    await msg.channel.send(reply)
+
+    # Finally — process prefix commands
+    await bot.process_commands(msg)
+
 
 
 ###############################################################
