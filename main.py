@@ -15,7 +15,6 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from openai import OpenAI
-
 # ============ FIX: GUARANTEE admin_group ALWAYS EXISTS ============
 # Some chunks load out of order during Railway hot reloads.
 # This ensures admin_group exists BEFORE any decorators use it.
@@ -28,7 +27,6 @@ except NameError:
         name="admin",
         description="Admin & Coordination Commands"
     )
-
 ###############################################################
 # 1. ENVIRONMENT VALIDATION
 ###############################################################
