@@ -6,6 +6,11 @@
   "daily_summary": true,
   "weekly_summary": true,
   "xp_enabled": true,
+  "logging_enabled": true,
+  "tickets_enabled": true,
+  "polls_enabled": true,
+  "reminders_enabled": true,
   "ai_default_mode": "ceil",
+  "auto_role_name": "Teacher",
   "banned_words": ["fuck", "shit", "bitch"]
 }
