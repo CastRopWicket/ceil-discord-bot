@@ -1568,10 +1568,6 @@ async def analyze_pdf_slash(interaction: discord.Interaction, text: str):
 ###############################################################
 
 print("📦 Loaded CHUNK 4 (Advanced research & academic tools)")
-# === Safety reset to avoid duplicate fun commands ===
-for cmd in ["hangman", "guess", "blackjack", "hit", "stand", "trivia", "answer"]:
-    if cmd in bot.commands:
-        bot.remove_command(cmd)
 ###############################################
 # CEIL BOT — FULL MAX EDITION (Chunk 5/8)
 # FUN INTERACTION ENGINE (GAMES + SOCIAL TOOLS)
