@@ -16,7 +16,7 @@
     "shit",
     "bitch"
   ],
-  "ai_model": "gpt-4.1 mini",
+  "ai_model": "gpt-4.1-mini",
   "max_reply_length": 1900,
   "log_channel_name": "ceil-logs"
 }
