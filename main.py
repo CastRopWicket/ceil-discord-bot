@@ -2047,6 +2047,179 @@ async def ceilsecret_cmd(ctx):
     await ctx.reply(f"🥚 You found a CEIL Easter Egg! (+{xp} XP)")
 print("📦 Loaded CHUNK 5 (Fun engine + games + creative tools)")
 ###############################################
+# CEIL BOT CONTROL PANEL (Admin Dashboard UI)
+###############################################
+
+from discord.ui import View, Button, Select, Modal, InputText
+
+panel_group = app_commands.Group(
+    name="panel",
+    description="Admin control panel for CEIL Bot"
+)
+
+def save_and_reload_config():
+    save_config()
+    load_config()
+
+###############################################
+# 1. FEATURES TOGGLE PANEL
+###############################################
+
+class FeatureToggleView(View):
+    def __init__(self):
+        super().__init__(timeout=300)
+
+        # Generate toggle buttons for each feature dynamically
+        for feature in [
+            "ai_enabled",
+            "moderation_enabled",
+            "xp_enabled",
+            "fun_enabled",
+            "lessons_enabled",
+            "research_enabled",
+            "images_enabled",
+        ]:
+            state = "ON" if config.get(feature, True) else "OFF"
+            color = discord.ButtonStyle.success if state == "ON" else discord.ButtonStyle.danger
+
+            self.add_item(
+                Button(
+                    label=f"{feature.replace('_',' ').title()} ({state})",
+                    style=color,
+                    custom_id=feature
+                )
+            )
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not is_staff(interaction.user):
+            await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self):
+        self.clear_items()
+
+    @discord.ui.button(label="Refresh Panel", style=discord.ButtonStyle.primary)
+    async def refresh(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.edit_message(
+            content="🔧 Feature Panel (Updated)",
+            view=FeatureToggleView()
+        )
+
+    async def on_button_click(self, interaction: discord.Interaction):
+        feature = interaction.data["custom_id"]
+
+        if feature in config:
+            config[feature] = not config[feature]
+            save_and_reload_config()
+
+            await interaction.response.edit_message(
+                content=f"🔧 Toggled **{feature}** → `{config[feature]}`",
+                view=FeatureToggleView()
+            )
+
+    async def interaction_check(self, interaction: discord.Interaction):
+        # Called for every interaction
+        if not is_staff(interaction.user):
+            await interaction.response.send_message("❌ Admins only.", ephemeral=True)
+            return False
+        return True
+
+###############################################
+# 2. XP CONTROL PANEL
+###############################################
+
+class XPModal(Modal):
+    def __init__(self, user: discord.Member, action: str):
+        super().__init__(title=f"{action.title()} XP")
+        self.user = user
+        self.action = action
+
+        self.xp_amount = InputText(
+            label="XP Amount",
+            placeholder="Enter value",
+            style=discord.InputTextStyle.short,
+        )
+        self.add_item(self.xp_amount)
+
+    async def callback(self, interaction: discord.Interaction):
+        try:
+            amount = int(self.xp_amount.value)
+        except:
+            return await interaction.response.send_message("Invalid number.", ephemeral=True)
+
+        xp, level = get_xp_profile(self.user.id)
+
+        if self.action == "add":
+            add_xp(self.user.id, amount)
+            result = f"Added **+{amount} XP** to {self.user.mention}."
+        elif self.action == "remove":
+            new_xp = max(0, xp - amount)
+            xp_data[str(self.user.id)]["xp"] = new_xp
+            save_xp()
+            result = f"Removed **-{amount} XP** from {self.user.mention}."
+        elif self.action == "set":
+            xp_data[str(self.user.id)] = {"xp": amount, "level": 1}
+            save_xp()
+            result = f"Set XP of {self.user.mention} to **{amount}**."
+
+        await interaction.response.send_message(result, ephemeral=True)
+
+
+class XPControlView(View):
+    def __init__(self, target: discord.Member):
+        super().__init__(timeout=300)
+        self.target = target
+
+    @discord.ui.button(label="Add XP", style=discord.ButtonStyle.success)
+    async def add_xp_btn(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(XPModal(self.target, "add"))
+
+    @discord.ui.button(label="Remove XP", style=discord.ButtonStyle.danger)
+    async def remove_xp_btn(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(XPModal(self.target, "remove"))
+
+    @discord.ui.button(label="Set XP", style=discord.ButtonStyle.primary)
+    async def set_xp_btn(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(XPModal(self.target, "set"))
+
+###############################################
+# 3. /panel features
+###############################################
+
+@panel_group.command(
+    name="features",
+    description="Open the feature toggle panel."
+)
+async def panel_features(interaction: discord.Interaction):
+    if not is_staff(interaction.user):
+        return await interaction.response.send_message("❌ Admin only.", ephemeral=True)
+
+    await interaction.response.send_message(
+        "🔧 **CEIL Bot Feature Control Panel**",
+        view=FeatureToggleView(),
+        ephemeral=True
+    )
+
+@panel_group.command(
+    name="xp",
+    description="Open XP control panel for a user."
+)
+@app_commands.describe(user="Select user to modify XP")
+async def panel_xp(interaction: discord.Interaction, user: discord.Member):
+    if not is_staff(interaction.user):
+        return await interaction.response.send_message("❌ Admin only.", ephemeral=True)
+
+    await interaction.response.send_message(
+        f"🎮 XP Controls for {user.mention}",
+        view=XPControlView(user),
+        ephemeral=True
+    )
+
+# register panel group
+bot.tree.add_command(panel_group)
+
+###############################################
 # CEIL BOT — FULL MAX EDITION (Chunk 6/8)
 # ADMIN & COORDINATION SUITE
 ###############################################
