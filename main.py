@@ -2135,10 +2135,10 @@ class XPModal(Modal):
         self.user = user
         self.action = action
 
-        self.xp_amount = InputText(
+        self.xp_amount = TextInput(
             label="XP Amount",
             placeholder="Enter value",
-            style=discord.InputTextStyle.short,
+            style=discord.TextInputStyle.short,
         )
         self.add_item(self.xp_amount)
 
