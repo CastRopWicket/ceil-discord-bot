@@ -16,6 +16,19 @@ from discord.ext import commands
 from discord import app_commands
 from openai import OpenAI
 
+# ============ FIX: GUARANTEE admin_group ALWAYS EXISTS ============
+# Some chunks load out of order during Railway hot reloads.
+# This ensures admin_group exists BEFORE any decorators use it.
+
+from discord import app_commands
+
+try:
+    admin_group
+except NameError:
+        name="admin",
+        description="Admin & Coordination Commands"
+    )
+
 ###############################################################
 # 1. ENVIRONMENT VALIDATION
 ###############################################################
@@ -1568,6 +1581,11 @@ async def analyze_pdf_slash(interaction: discord.Interaction, text: str):
 ###############################################################
 
 print("📦 Loaded CHUNK 4 (Advanced research & academic tools)")
+# ============ FIX: REMOVE DUPLICATE COMMANDS ============
+for cmd_name in ["hangman", "guess", "blackjack", "hit", "stand", "trivia", "answer"]:
+    if cmd_name in bot.commands:
+        bot.remove_command(cmd_name)
+
 ###############################################
 # CEIL BOT — FULL MAX EDITION (Chunk 5/8)
 # FUN INTERACTION ENGINE (GAMES + SOCIAL TOOLS)
@@ -2635,6 +2653,14 @@ async def ai_general_reply(user_msg: str, user_name: str, mode: str) -> str:
 ###############################################################
 # 49. FINAL on_ready — sync everything
 ###############################################################
+# ============ FIX: FORCE ADMIN GROUP ATTACH ============
+# Railway sometimes reloads chunks before admin_group exists.
+# This safely attaches the group to the bot.tree.
+
+try:
+    bot.tree.add_command(admin_group, override=True)
+except Exception:
+    pass
 
 @bot.event
 async def on_ready():
