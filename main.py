@@ -2050,7 +2050,7 @@ print("📦 Loaded CHUNK 5 (Fun engine + games + creative tools)")
 # CEIL BOT CONTROL PANEL (Admin Dashboard UI)
 ###############################################
 
-from discord.ui import View, Button, Select, Modal, InputText
+from discord.ui import View, Button, Select, Modal, TextInput
 
 panel_group = app_commands.Group(
     name="panel",
