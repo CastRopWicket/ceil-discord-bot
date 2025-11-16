@@ -24,9 +24,11 @@ from discord import app_commands
 try:
     admin_group
 except NameError:
+    admin_group = app_commands.Group(
         name="admin",
         description="Admin & Coordination Commands"
     )
+
 ###############################################################
 # 1. ENVIRONMENT VALIDATION
 ###############################################################
