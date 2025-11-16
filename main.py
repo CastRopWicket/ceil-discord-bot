@@ -2569,16 +2569,31 @@ async def grade_handwriting_slash(
 
 @bot.event
 async def on_message(msg: discord.Message):
-
-    # 1. Ignore bot messages
+    # Ignore bots
     if msg.author.bot:
         return
 
-    guild = msg.guild
+    print(f"MSG RECEIVED: {msg.content}")  # optional debug
 
-    # 2. XP system: give XP for normal messages
+    guild = msg.guild
+    content = msg.content.strip()
+    uid = msg.author.id
+
+    # ======================================================
+    # 1. PREFIX COMMANDS MUST RUN FIRST (e.g. !hangman !roll)
+    # ======================================================
+    if content.startswith("!"):
+        return await bot.process_commands(msg)
+
+    # Slash commands handled by Discord — do nothing
+    if content.startswith("/"):
+        return
+
+    # ======================================================
+    # 2. XP SYSTEM
+    # ======================================================
     if config.get("xp_enabled", True):
-        leveled_up, new_level = add_xp(msg.author.id, amount=5)
+        leveled_up, new_level = add_xp(uid, amount=5)
         if leveled_up:
             try:
                 await msg.channel.send(
@@ -2587,31 +2602,34 @@ async def on_message(msg: discord.Message):
             except:
                 pass
 
-    # 3. Moderation: banned words
+    # ======================================================
+    # 3. MODERATION LAYERS
+    # ======================================================
     if config.get("moderation_enabled", True):
-        lower_text = msg.content.lower()
-        if any(bad in lower_text for bad in BANNED_WORDS):
+
+        lower = content.lower()
+
+        # banned words
+        if any(b in lower for b in BANNED_WORDS):
             try:
                 await msg.delete()
             except:
                 pass
-            await log_event(guild, f"🚨 Deleted banned word from {msg.author}")
+            await log_event(guild, f"🚨 Banned word removed from {msg.author}")
             return
 
-        # Anti-link filter
-        if is_link(msg.content):
-            if not is_staff(msg.author):
-                try:
-                    await msg.delete()
-                except:
-                    pass
-                await log_event(guild, f"🔗 Blocked link from {msg.author}")
-                return
+        # links
+        if is_link(content) and not is_staff(msg.author):
+            try:
+                await msg.delete()
+            except:
+                pass
+            await log_event(guild, f"🔗 Link blocked from {msg.author}")
+            return
 
-        # Spam detection
+        # spam detection
         now = time.time()
         gid = guild.id if guild else 0
-        uid = msg.author.id
 
         if gid not in spam_tracker:
             spam_tracker[gid] = {}
@@ -2619,7 +2637,6 @@ async def on_message(msg: discord.Message):
             spam_tracker[gid][uid] = []
 
         spam_tracker[gid][uid].append(now)
-
         spam_tracker[gid][uid] = [
             t for t in spam_tracker[gid][uid]
             if now - t <= SPAM_WINDOW_SECONDS
@@ -2632,55 +2649,53 @@ async def on_message(msg: discord.Message):
                 pass
             return
 
-        # Slowmode enforcement
+        # slowmode
         ch = msg.channel
         if ch.id in slowmode_settings:
             delay = slowmode_settings[ch.id]
             key = (ch.id, uid)
             last = last_message_time.get(key, 0)
+
             if now - last < delay:
                 try:
                     await msg.delete()
                 except:
                     pass
                 return
+
             last_message_time[key] = now
 
-    # 4. Auto-AI response in channels with AI enabled
-    if config.get("ai_enabled", True):
+    # ======================================================
+    # 4. AUTO AI REPLY (Activated only when triggered)
+    # ======================================================
+    if config.get("ai_enabled", True) and msg.guild:
 
-        # Only respond in text channels (avoid DMs)
-        if msg.guild is not None:
-            mode = channel_modes.get(msg.channel.id, config.get("ai_default_mode", "ceil"))
-            content = msg.content.strip()
+        mode = channel_modes.get(msg.channel.id, config.get("ai_default_mode", "ceil"))
 
-            # Ignore commands
-            # Allow prefix commands through
-if content.startswith("!") or content.startswith("/"):
-    return await bot.process_commands(msg)
+        trigger = (
+            msg.channel.name.startswith("ai-") or
+            content.lower().startswith("ceil") or
+            f"<@{bot.user.id}>" in content
+        )
 
+        if trigger:
+            try:
+                await msg.channel.trigger_typing()
+            except:
+                pass
 
-            # Trigger AI only when addressed or in designated channels
-            trigger = (
-                msg.channel.name.startswith("ai-") or
-                msg.content.lower().startswith("ceil") or
-                f"<@{bot.user.id}>" in msg.content
-            )
+            reply = await ai_general_reply(content, str(msg.author), mode)
 
-            if trigger:
-                try:
-                    await msg.channel.trigger_typing()
-                except:
-                    pass
+            try:
+                await msg.reply(reply, mention_author=False)
+            except:
+                await msg.channel.send(reply)
 
-                reply = await ai_general_reply(content, str(msg.author), mode)
-                try:
-                    await msg.reply(reply, mention_author=False)
-                except:
-                    await msg.channel.send(reply)
-
-    # Allow commands to be processed
+    # ======================================================
+    # 5. Final: allow commands again (safe)
+    # ======================================================
     await bot.process_commands(msg)
+
 
 ###############################################################
 # END OF CHUNK 7
