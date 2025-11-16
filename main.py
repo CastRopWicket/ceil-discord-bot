@@ -428,13 +428,13 @@ async def apply_auto_mute(member: discord.Member, guild: discord.Guild, reason: 
 
     bot.loop.create_task(unmute_later())
 
-
 import re
 
 def is_link(text: str) -> bool:
     # only block REAL hyperlinks
     pattern = r"(https?://[^\s]+|discord\.gg/[^\s]+)"
     return bool(re.search(pattern, text.lower()))
+    
 @bot.event
 async def on_message(msg):
 print(f"MSG RECEIVED: {msg.content}")
