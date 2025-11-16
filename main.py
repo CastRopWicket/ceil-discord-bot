@@ -2655,8 +2655,10 @@ async def on_message(msg: discord.Message):
             content = msg.content.strip()
 
             # Ignore commands
-            if content.startswith("!") or content.startswith("/"):
-                return
+            # Allow prefix commands through
+if content.startswith("!") or content.startswith("/"):
+    return await bot.process_commands(msg)
+
 
             # Trigger AI only when addressed or in designated channels
             trigger = (
