@@ -3781,6 +3781,155 @@ async def on_ready():
     print("- Vision tools (image analysis, OCR, handwriting grading)")
     print(f"Slash commands synced: {synced_ok}")
     print("===========================================")
+###############################################
+# GLOBAL HELP CENTER — /help (Discord Embed)
+###############################################
+
+@bot.tree.command(name="help", description="Show all bot commands categorized.")
+async def help_slash(interaction: discord.Interaction):
+
+    embed = discord.Embed(
+        title="📘 CEIL Bot — Full Command Center",
+        description="All available commands grouped by category.",
+        color=discord.Color.blue()
+    )
+
+    # =========================
+    # AI Commands
+    # =========================
+    embed.add_field(
+        name="🤖 AI & Conversation",
+        value=(
+            "**!ceil <msg>** — Ask the CEIL AI\n"
+            "**!mode <name>** — Set AI mode (ceil/education/admin/general/fun/topic)\n"
+            "**!currentmode** — Show current mode\n"
+            "**!modes** — List all modes"
+        ),
+        inline=False
+    )
+
+    # =========================
+    # Moderation Commands
+    # =========================
+    embed.add_field(
+        name="🛡 Moderation",
+        value=(
+            "**!warn @user [reason]** — Add a warning\n"
+            "**!warnings @user** — Show warnings\n"
+            "**!mute @user** — Mute member\n"
+            "**!unmute @user** — Unmute member\n"
+            "**!kick @user** — Kick member\n"
+            "**!ban @user** — Ban member\n"
+            "**!purge <num>** — Delete messages\n"
+            "**!slowmode <seconds>** — Set channel slowmode"
+        ),
+        inline=False
+    )
+
+    # =========================
+    # Teacher Suite
+    # =========================
+    embed.add_field(
+        name="📚 Teacher Tools",
+        value=(
+            "**/lessonplan** — Generate a lesson plan\n"
+            "**/worksheet** — Create worksheets\n"
+            "**/quiz** — Generate quizzes\n"
+            "**/template** — Teaching templates\n"
+            "**/homework** — Generate homework\n"
+            "**/dialogue** — Speaking dialogue\n"
+            "**/analyze_student_text** — Analyze student writing"
+        ),
+        inline=False
+    )
+
+    # =========================
+    # Research Suite
+    # =========================
+    embed.add_field(
+        name="🎓 Research Tools",
+        value=(
+            "**/article_summary** — Summarize article\n"
+            "**/research_outline** — MA/PhD outline\n"
+            **"/compare_theories** — Compare scholars\n"
+            "**/apa_cite** — APA reference\n"
+            **"/evaluate_paper** — Evaluate study\n"
+            "**/literature_review** — Literature review\n"
+            "**/supervisor_feedback** — Supervisor-style feedback"
+        ),
+        inline=False
+    )
+
+    # =========================
+    # Vision & Image Tools
+    # =========================
+    embed.add_field(
+        name="🖼 Image & PDF Tools",
+        value=(
+            "**/analyze_image** — Image + OCR\n"
+            "**/extract_text** — Extract text from image\n"
+            "**/grade_handwriting** — Evaluate handwriting\n"
+            "**/analyze_pdf** — Analyze PDF text"
+        ),
+        inline=False
+    )
+
+    # =========================
+    # Fun & Games
+    # =========================
+    embed.add_field(
+        name="🎮 Fun Commands",
+        value=(
+            "**!blackjack** — Start blackjack\n"
+            "**!hit** — Draw\n"
+            "**!stand** — Hold\n"
+            "**!hangman** — Start hangman\n"
+            "**!guess <letter>** — Guess\n"
+            "**!trivia [category]** — Trivia\n"
+            "**!answer <text>** — Trivia answer\n"
+            "**!flip** — Coin flip\n"
+            "**!roll <sides>** — Dice\n"
+            "**!choose A | B | C** — Random pick"
+        ),
+        inline=False
+    )
+
+    # =========================
+    # Google Center Commands
+    # =========================
+    embed.add_field(
+        name="🟩 Google Center",
+        value=(
+            "**/gdrive_upload** — Upload to Drive\n"
+            "**/gdrive_list** — List Drive files\n"
+            "**/gyt_search** — Search YouTube\n"
+            "**/gcal_events** — Calendar events\n"
+            "**/gdoc_create** — Create Google Doc\n"
+            "**/gsheet_append** — Append to Google Sheet\n"
+            "**/google_center** — Google UI Dashboard"
+        ),
+        inline=False
+    )
+
+    # =========================
+    # Admin Tools
+    # =========================
+    embed.add_field(
+        name="⚙️ Admin Suite",
+        value=(
+            "**/admin announce** — Post announcement\n"
+            "**/admin dm_all** — DM role members\n"
+            "**/admin create_structure** — Build CEIL server\n"
+            "**/admin progress_report** — Full progress report\n"
+            "**/teacher_register** — Register groups/levels\n"
+            "**/progress_update** — Submit update"
+        ),
+        inline=False
+    )
+
+    embed.set_footer(text="CEIL Bot — Full Max Edition")
+
+    await interaction.response.send_message(embed=embed, ephemeral=False)
 
 
 ###############################################################
