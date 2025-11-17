@@ -3830,163 +3830,111 @@ async def on_ready():
 # GLOBAL HELP CENTER — /help (Discord Embed)
 ###############################################
 
-@bot.tree.command(name="help", description="Show all bot commands categorized.")
+@bot.tree.command(name="help", description="Show a full list of all bot commands.")
 async def help_slash(interaction: discord.Interaction):
 
     embed = discord.Embed(
-        title="📘 CEIL Bot — Full Command Center",
-        description="All available commands grouped by category.",
+        title="📘 CEIL Full-Max Bot — Help Menu",
+        description="Here are all available command categories and what they do.",
         color=discord.Color.blue()
     )
 
-    # =========================
-    # AI Commands
-    # =========================
     embed.add_field(
-        name="🤖 AI & Conversation",
+        name="🎓 AI & Modes",
         value=(
-            "**!ceil <msg>** — Ask the CEIL AI\n"
-            "**!mode <name>** — Set AI mode (ceil/education/admin/general/fun/topic)\n"
-            "**!currentmode** — Show current mode\n"
-            "**!modes** — List all modes"
+            "**!ceil <msg>** — Ask AI in current mode\n"
+            "**!mode <mode>** — Set channel mode\n"
+            "**!currentmode** — Show active mode\n"
+            "**!modes** — List all modes\n"
         ),
         inline=False
     )
 
-    # =========================
-    # Moderation Commands
-    # =========================
     embed.add_field(
-        name="🛡 Moderation",
+        name="📚 Teaching Tools",
         value=(
-            "**!warn @user [reason]** — Add a warning\n"
-            "**!warnings @user** — Show warnings\n"
-            "**!mute @user** — Mute member\n"
-            "**!unmute @user** — Unmute member\n"
-            "**!kick @user** — Kick member\n"
-            "**!ban @user** — Ban member\n"
-            "**!purge <num>** — Delete messages\n"
-            "**!slowmode <seconds>** — Set channel slowmode"
-        ),
-        inline=False
-    )
-
-    # =========================
-    # Teacher Suite
-    # =========================
-    embed.add_field(
-        name="📚 Teacher Tools",
-        value=(
-            "**/lessonplan** — Generate a lesson plan\n"
-            "**/worksheet** — Create worksheets\n"
-            "**/quiz** — Generate quizzes\n"
+            "**/lessonplan** — Generate CEFR lesson plan\n"
+            "**/worksheet** — Create ESL worksheet\n"
+            "**/quiz** — Generate quiz\n"
             "**/template** — Teaching templates\n"
-            "**/homework** — Generate homework\n"
-            "**/dialogue** — Speaking dialogue\n"
-            "**/analyze_student_text** — Analyze student writing"
+            "**/session_report** — Convert raw notes into report\n"
+            "**/homework** — Generate homework task\n"
+            "**/dialogue** — Classroom dialogue\n"
+            "**/observation_form** — Observation checklist\n"
         ),
         inline=False
     )
 
-    # =========================
-    # Research Suite
-    # =========================
     embed.add_field(
-        name="🎓 Research Tools",
+        name="📘 Research Tools",
         value=(
             "**/article_summary** — Summarize article\n"
-            "**/research_outline** — MA/PhD outline\n"
-            "`/compare_theories` — Compare two theories/scholars\n"
-            "**/apa_cite** — APA reference\n"
-            **"/evaluate_paper** — Evaluate study\n"
-            "**/literature_review** — Literature review\n"
-            "**/supervisor_feedback** — Supervisor-style feedback"
+            "**/research_outline** — Build research structure\n"
+            "**/compare_theories** — Compare scholars\n"
+            "**/apa_cite** — APA style citation\n"
+            "**/explain_theory** — Explain research concepts\n"
+            "**/translate_academic** — Academic translation\n"
+            "**/evaluate_paper** — Evaluate research paper\n"
+            "**/literature_review** — Mini lit review\n"
+            "**/supervisor_feedback** — Feedback on proposal\n"
         ),
         inline=False
     )
 
-    # =========================
-    # Vision & Image Tools
-    # =========================
     embed.add_field(
-        name="🖼 Image & PDF Tools",
-        value=(
-            "**/analyze_image** — Image + OCR\n"
-            "**/extract_text** — Extract text from image\n"
-            "**/grade_handwriting** — Evaluate handwriting\n"
-            "**/analyze_pdf** — Analyze PDF text"
-        ),
-        inline=False
-    )
-
-    # =========================
-    # Fun & Games
-    # =========================
-    embed.add_field(
-        name="🎮 Fun Commands",
-        value=(
-            "**!blackjack** — Start blackjack\n"
-            "**!hit** — Draw\n"
-            "**!stand** — Hold\n"
-            "**!hangman** — Start hangman\n"
-            "**!guess <letter>** — Guess\n"
-            "**!trivia [category]** — Trivia\n"
-            "**!answer <text>** — Trivia answer\n"
-            "**!flip** — Coin flip\n"
-            "**!roll <sides>** — Dice\n"
-            "**!choose A | B | C** — Random pick"
-        ),
-        inline=False
-    )
-
-    # =========================
-    # Google Center Commands
-    # =========================
-    embed.add_field(
-        name="🟩 Google Center",
-        value=(
-            "**/gdrive_upload** — Upload to Drive\n"
-            "**/gdrive_list** — List Drive files\n"
-            "**/gyt_search** — Search YouTube\n"
-            "**/gcal_events** — Calendar events\n"
-            "**/gdoc_create** — Create Google Doc\n"
-            "**/gsheet_append** — Append to Google Sheet\n"
-            "**/google_center** — Google UI Dashboard"
-        ),
-        inline=False
-    )
-
-    # =========================
-    # Admin Tools
-    # =========================
-    embed.add_field(
-        name="⚙️ Admin Suite",
+        name="🛠 Admin Commands",
         value=(
             "**/admin announce** — Post announcement\n"
-            "**/admin dm_all** — DM role members\n"
-            "**/admin create_structure** — Build CEIL server\n"
-            "**/admin progress_report** — Full progress report\n"
-            "**/teacher_register** — Register groups/levels\n"
-            "**/progress_update** — Submit update"
+            "**/admin dm_all** — DM all members of a role\n"
+            "**/admin create_structure** — Build CEIL channel layout\n"
+            "**/admin progress_report** — See teacher progress\n"
         ),
         inline=False
     )
 
-    embed.set_footer(text="CEIL Bot — Full Max Edition")
+    embed.add_field(
+        name="📝 Teacher Tracking",
+        value=(
+            "**/teacher_register** — Register teaching groups\n"
+            "**/progress_update** — Submit progression\n"
+        ),
+        inline=False
+    )
 
-    await interaction.response.send_message(embed=embed, ephemeral=False)
-text_research = (
-    "**Research & Academic Commands**\n"
-    "`/article_summary` — Summarize an academic article\n"
-    "`/research_outline` — Generate a research plan (MA/PhD/Article)\n"
-    "`/compare_theories` — Compare two theories or scholars\n"
-    "`/apa_cite` — Generate APA citation\n"
-    "`/explain_theory` — Explain a linguistic/research concept\n"
-    "`/translate_academic` — Translate text into academic English\n"
-    "`/evaluate_paper` — Critically evaluate a paper\n"
-    "`/literature_review` — Short literature review\n"
-    "`/supervisor_feedback` — Supervisor-style feedback on a proposal\n"
-)
+    embed.add_field(
+        name="🧠 Vision & Images",
+        value=(
+            "**/analyze_image** — OCR + feedback\n"
+            "**/extract_text** — Extract text from image\n"
+            "**/grade_handwriting** — Evaluate handwritten work\n"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🎮 Fun",
+        value=(
+            "**!blackjack / !hit / !stand** — Play blackjack\n"
+            "**!hangman / !guess** — Play hangman\n"
+            "**!trivia / !answer** — Trivia game\n"
+            "**!roll** — Roll dice\n"
+            "**!flip** — Flip a coin\n"
+            "**!choose A|B|C** — Random choice\n"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🔧 Google Tools",
+        value=(
+            "**/gdrive_upload** — Upload to Drive\n"
+            "**/gdrive_search** — Search Drive\n"
+            "**/youtube_search** — Search YouTube\n"
+        ),
+        inline=False
+    )
+
+    await interaction.response.send_message(embed=embed)
 
 
 ###############################################################
