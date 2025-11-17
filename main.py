@@ -3896,7 +3896,7 @@ async def help_slash(interaction: discord.Interaction):
         value=(
             "**/article_summary** — Summarize article\n"
             "**/research_outline** — MA/PhD outline\n"
-            **"/compare_theories** — Compare scholars\n"
+            "`/compare_theories` — Compare two theories/scholars\n"
             "**/apa_cite** — APA reference\n"
             **"/evaluate_paper** — Evaluate study\n"
             "**/literature_review** — Literature review\n"
