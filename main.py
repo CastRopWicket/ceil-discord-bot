@@ -228,6 +228,196 @@ def make_embed(
     embed = discord.Embed(title=title, description=description, color=color)
     embed.timestamp = datetime.utcnow()
     return embed
+# ================== ADMIN DASHBOARD V2 ==================
+
+def build_admin_dashboard_embed() -> discord.Embed:
+    """
+    Build a snapshot of current config toggles for the dashboard.
+    """
+    feature_keys = [
+        ("ai_enabled", "AI Engine / Chat"),
+        ("moderation_enabled", "Moderation (filters, spam, links)"),
+        ("xp_enabled", "XP / Level System"),
+        ("fun_enabled", "Fun & Games"),
+        ("lessons_enabled", "Teacher Lesson Tools"),
+        ("research_enabled", "Research & Academic Tools"),
+        ("images_enabled", "Vision / Image Tools"),
+        ("logging_enabled", "Logging / #ceil-logs"),
+        ("reminders_enabled", "Reminders"),
+        ("polls_enabled", "Polls / Votes"),
+    ]
+
+    lines = []
+    for key, label in feature_keys:
+        val = config.get(key, DEFAULT_CONFIG.get(key, True))
+        emoji = "🟢" if val else "🔴"
+        lines.append(f"{emoji} **{label}** — `{key}` = `{val}`")
+
+    desc = "\n".join(lines) or "No configuration loaded."
+
+    embed = make_embed(
+        title="🛠 CEIL Admin Dashboard v2",
+        description=desc,
+        color=discord.Color.blurple(),
+    )
+    embed.add_field(
+        name="How to use",
+        value=(
+            "• Use the **select menu** below to toggle features ON/OFF.\n"
+            "• Use **Edit Banned Words** to change filters.\n"
+            "• Use **Reload / Save config** to sync with `config.json`.\n"
+            "• For XP tools: `/admin xp_add`, `/admin xp_remove`, `/admin xp_set`, `/admin xp_show`."
+        ),
+        inline=False,
+    )
+    return embed
+class FeatureToggleSelect(Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="AI Engine", value="ai_enabled", description="Toggle AI auto-reply & /ceil"),
+            discord.SelectOption(label="Moderation", value="moderation_enabled", description="Banned words, links, spam"),
+            discord.SelectOption(label="XP System", value="xp_enabled", description="XP gain + levels"),
+            discord.SelectOption(label="Fun & Games", value="fun_enabled", description="Blackjack, hangman, trivia, etc."),
+            discord.SelectOption(label="Lessons Tools", value="lessons_enabled", description="Lesson plans, worksheets, quizzes"),
+            discord.SelectOption(label="Research Tools", value="research_enabled", description="Research outlines, APA, reviews"),
+            discord.SelectOption(label="Image / Vision", value="images_enabled", description="Image analysis, OCR, handwriting"),
+            discord.SelectOption(label="Logging", value="logging_enabled", description="#ceil-logs events"),
+            discord.SelectOption(label="Reminders", value="reminders_enabled", description="Reminder tools (if any)"),
+            discord.SelectOption(label="Polls", value="polls_enabled", description="Poll / vote utilities"),
+        ]
+        super().__init__(
+            placeholder="Select a feature to toggle…",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        key = self.values[0]
+        current = config.get(key, DEFAULT_CONFIG.get(key, True))
+        config[key] = not current
+        save_config()
+
+        embed = build_admin_dashboard_embed()
+        await interaction.response.edit_message(
+            content=f"✅ Toggled `{key}` → `{config[key]}`",
+            embed=embed,
+            view=self.view,
+        )
+
+
+class BannedWordsModal(Modal):
+    def __init__(self):
+        super().__init__(title="Edit Banned Words")
+
+        default_text = ", ".join(BANNED_WORDS) if BANNED_WORDS else ""
+        self.words = TextInput(
+            label="Banned words (comma separated)",
+            default=default_text,
+            style=TextStyle.paragraph,
+            required=False,
+            max_length=400,
+        )
+        self.add_item(self.words)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        global BANNED_WORDS, config
+        raw = self.words.value or ""
+        words = [w.strip().lower() for w in raw.split(",") if w.strip()]
+
+        config["banned_words"] = words
+        BANNED_WORDS = words
+        save_config()
+
+        await interaction.response.send_message(
+            f"✅ Updated banned words: {', '.join(words) if words else 'none'}",
+            ephemeral=True,
+        )
+
+
+class BannedWordsButton(Button):
+    def __init__(self):
+        super().__init__(
+            label="Edit Banned Words",
+            style=discord.ButtonStyle.danger,
+            emoji="🚫",
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not isinstance(interaction.user, discord.Member) or not is_staff(interaction.user):
+            return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+        modal = BannedWordsModal()
+        await interaction.response.send_modal(modal)
+
+
+class ReloadConfigButton(Button):
+    def __init__(self):
+        super().__init__(
+            label="Reload config.json",
+            style=discord.ButtonStyle.secondary,
+            emoji="🔁",
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not isinstance(interaction.user, discord.Member) or not is_staff(interaction.user):
+            return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+        load_config()
+        embed = build_admin_dashboard_embed()
+        await interaction.response.edit_message(
+            content="✅ Reloaded configuration from disk.",
+            embed=embed,
+            view=self.view,
+        )
+
+
+class SaveConfigButton(Button):
+    def __init__(self):
+        super().__init__(
+            label="Save to config.json",
+            style=discord.ButtonStyle.success,
+            emoji="💾",
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not isinstance(interaction.user, discord.Member) or not is_staff(interaction.user):
+            return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+        save_config()
+        embed = build_admin_dashboard_embed()
+        await interaction.response.edit_message(
+            content="✅ Saved current configuration to `config.json`.",
+            embed=embed,
+            view=self.view,
+        )
+
+
+class AdminDashboardView(View):
+    def __init__(self, invoker: discord.Member):
+        super().__init__(timeout=600)
+        self.invoker_id = invoker.id
+
+        # Components
+        self.add_item(FeatureToggleSelect())
+        self.add_item(BannedWordsButton())
+        self.add_item(ReloadConfigButton())
+        self.add_item(SaveConfigButton())
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """
+        Only the invoker (or other staff) can use this dashboard.
+        """
+        if interaction.user.id == self.invoker_id:
+            return True
+        if isinstance(interaction.user, discord.Member) and is_staff(interaction.user):
+            return True
+
+        await interaction.response.send_message(
+            "❌ This dashboard session is not for you.",
+            ephemeral=True,
+        )
+        return False
 
 
 ###############################################################
@@ -2319,6 +2509,161 @@ async def admin_dm_all_slash(
     await log_event(
         interaction.guild,
         f"✉ DM-all by {user} to role {role_name}: sent={sent}, failed={failed}",
+    )
+@admin_group.command(
+    name="dashboard",
+    description="Open interactive Admin Dashboard v2 (feature toggles, banned words, config)."
+)
+async def admin_dashboard_slash(interaction: discord.Interaction):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not is_staff(user):
+        return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+    await interaction.response.defer(ephemeral=True, thinking=True)
+
+    view = AdminDashboardView(user)
+    embed = build_admin_dashboard_embed()
+
+    await interaction.followup.send(
+        content="🛠 Admin Dashboard v2 loaded.",
+        embed=embed,
+        view=view,
+        ephemeral=True,
+    )
+def _recalculate_level_for_xp(total_xp: int) -> int:
+    """
+    Recalculate level based on XP using the same logic as add_xp.
+    Level 1: 0–99, Level 2: 100–199, etc.
+    """
+    level = 1
+    required = level * 100
+    while total_xp >= required:
+        level += 1
+        required = level * 100
+    return level
+
+
+@admin_group.command(
+    name="xp_add",
+    description="(Admin) Add XP to a user."
+)
+@app_commands.describe(
+    member="User to give XP to.",
+    amount="Amount of XP to add (positive integer)."
+)
+async def admin_xp_add_slash(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    amount: int,
+):
+    if not isinstance(interaction.user, discord.Member) or not is_staff(interaction.user):
+        return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+    if amount <= 0:
+        return await interaction.response.send_message("Amount must be positive.", ephemeral=True)
+
+    leveled, new_level = add_xp(member.id, amount)
+    xp, lvl = get_xp_profile(member.id)
+
+    await interaction.response.send_message(
+        f"✅ Added **{amount} XP** to {member.mention}.\n"
+        f"Total XP: **{xp}**, Level: **{lvl}**",
+        ephemeral=True,
+    )
+
+
+@admin_group.command(
+    name="xp_remove",
+    description="(Admin) Remove XP from a user."
+)
+@app_commands.describe(
+    member="User to remove XP from.",
+    amount="Amount of XP to remove (positive integer)."
+)
+async def admin_xp_remove_slash(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    amount: int,
+):
+    if not isinstance(interaction.user, discord.Member) or not is_staff(interaction.user):
+        return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+    if amount <= 0:
+        return await interaction.response.send_message("Amount must be positive.", ephemeral=True)
+
+    uid = str(member.id)
+    if uid not in xp_data:
+        xp_data[uid] = {"xp": 0, "level": 1}
+
+    xp_data[uid]["xp"] = max(0, xp_data[uid]["xp"] - amount)
+    xp_data[uid]["level"] = _recalculate_level_for_xp(xp_data[uid]["xp"])
+    save_xp()
+
+    xp = xp_data[uid]["xp"]
+    lvl = xp_data[uid]["level"]
+
+    await interaction.response.send_message(
+        f"✅ Removed **{amount} XP** from {member.mention}.\n"
+        f"Total XP: **{xp}**, Level: **{lvl}**",
+        ephemeral=True,
+    )
+
+
+@admin_group.command(
+    name="xp_set",
+    description="(Admin) Set a user's XP to an exact value."
+)
+@app_commands.describe(
+    member="User to modify.",
+    amount="Exact XP total to set (0 or more)."
+)
+async def admin_xp_set_slash(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    amount: int,
+):
+    if not isinstance(interaction.user, discord.Member) or not is_staff(interaction.user):
+        return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+    if amount < 0:
+        return await interaction.response.send_message("XP cannot be negative.", ephemeral=True)
+
+    uid = str(member.id)
+    xp_data[uid] = {
+        "xp": amount,
+        "level": _recalculate_level_for_xp(amount),
+    }
+    save_xp()
+
+    xp = xp_data[uid]["xp"]
+    lvl = xp_data[uid]["level"]
+
+    await interaction.response.send_message(
+        f"✅ Set XP for {member.mention} to **{xp}** (Level **{lvl}**).",
+        ephemeral=True,
+    )
+
+
+@admin_group.command(
+    name="xp_show",
+    description="(Admin) Show a user's XP and level."
+)
+@app_commands.describe(
+    member="User to inspect."
+)
+async def admin_xp_show_slash(
+    interaction: discord.Interaction,
+    member: discord.Member,
+):
+    if not isinstance(interaction.user, discord.Member) or not is_staff(interaction.user):
+        return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+    xp, lvl = get_xp_profile(member.id)
+    await interaction.response.send_message(
+        f"ℹ XP profile for {member.mention}:\n"
+        f"• XP: **{xp}**\n"
+        f"• Level: **{lvl}**",
+        ephemeral=True,
     )
 
 
