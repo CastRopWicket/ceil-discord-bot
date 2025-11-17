@@ -2,6 +2,11 @@
 # CEIL BOT — FULL MAX EDITION (Chunk 1/8)
 # SYSTEM BOOT + CONFIG + UTILITIES + XP ENGINE
 ###############################################
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+import base64
+import json
 
 import os
 import json
@@ -83,6 +88,49 @@ DEFAULT_CONFIG = {
     "ai_model": "gpt-4.1-mini",
     "max_reply_length": 1900
 }
+# ===============================
+# GOOGLE API AUTHENTICATION
+# ===============================
+
+GOOGLE_CREDS_ENV = os.getenv("GOOGLE_CREDS_JSON")
+
+google_creds = None
+
+def load_google_credentials():
+    global google_creds
+
+    if not GOOGLE_CREDS_ENV:
+        print("⚠️ GOOGLE_CREDS_JSON not found in environment.")
+        return None
+
+    try:
+        decoded = base64.b64decode(GOOGLE_CREDS_ENV)
+        data = json.loads(decoded)
+    except Exception:
+        print("❌ Invalid GOOGLE_CREDS_JSON encoding.")
+        return None
+
+    try:
+        creds = Credentials.from_authorized_user_info(data)
+        google_creds = creds
+        return creds
+    except Exception as e:
+        print("❌ Error loading Google credentials:", e)
+        return None
+
+
+def build_google_service(api_name, api_version):
+    """
+    Generic Google service builder, used for Drive, YouTube, Calendar, etc.
+    """
+    if google_creds is None:
+        load_google_credentials()
+
+    if google_creds:
+        return build(api_name, api_version, credentials=google_creds)
+    else:
+        print("❌ Google credentials not available.")
+        return None
 
 # Global config and banned words
 config: dict = {}
@@ -490,6 +538,297 @@ def get_xp_profile(user_id: int):
     if uid not in xp_data:
         return (0, 1)
     return xp_data[uid]["xp"], xp_data[uid]["level"]
+###############################################################
+# GOOGLE CENTER CORE — AUTH + SERVICE HELPERS
+###############################################################
+
+GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+
+GOOGLE_SCOPES = [
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/documents",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/calendar",
+]
+
+google_creds_cache = None
+
+
+def get_google_credentials():
+    """
+    Load and cache Google service account credentials from
+    GOOGLE_SERVICE_ACCOUNT_JSON env var.
+    """
+    global google_creds_cache
+
+    if google_creds_cache is not None:
+        return google_creds_cache
+
+    if not GOOGLE_SERVICE_ACCOUNT_JSON:
+        print("⚠ GOOGLE_SERVICE_ACCOUNT_JSON is not set. Google Center disabled.")
+        return None
+
+    try:
+        info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
+        creds = GoogleServiceAccountCredentials.from_service_account_info(
+            info,
+            scopes=GOOGLE_SCOPES,
+        )
+        google_creds_cache = creds
+        print("✅ Google service account loaded.")
+        return creds
+    except Exception as e:
+        print("❌ Failed to load Google credentials:", e)
+        return None
+
+
+def build_google_service(api_name: str, api_version: str):
+    """
+    Build a Google API service client.
+    Used for Drive, Docs, Sheets, Calendar.
+    """
+    creds = get_google_credentials()
+    if not creds:
+        return None
+
+    try:
+        service = google_build(api_name, api_version, credentials=creds)
+        return service
+    except Exception as e:
+        print(f"❌ Failed to build Google service {api_name} {api_version}: {e}")
+        return None
+
+
+def build_youtube_service():
+    """
+    Build a YouTube Data API client using API key.
+    (YouTube is easier with API key than service accounts.)
+    """
+    if not YOUTUBE_API_KEY:
+        print("⚠ YOUTUBE_API_KEY not set.")
+        return None
+
+    try:
+        service = google_build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
+        return service
+    except Exception as e:
+        print("❌ Failed to build YouTube service:", e)
+        return None
+###############################################################
+# GOOGLE DRIVE COMMANDS
+###############################################################
+
+@bot.tree.command(name="gdrive_upload", description="Upload a file from Discord to Google Drive.")
+async def gdrive_upload_slash(interaction: discord.Interaction, file: discord.Attachment):
+    await interaction.response.defer(thinking=True)
+
+    drive = build_google_service("drive", "v3")
+    if not drive:
+        return await interaction.followup.send("Google Drive is not configured (check GOOGLE_SERVICE_ACCOUNT_JSON).", ephemeral=True)
+
+    data = await file.read()
+    media = MediaIoBaseUpload(io.BytesIO(data), mimetype=file.content_type or "application/octet-stream", resumable=False)
+
+    file_metadata = {"name": file.filename}
+    try:
+        created = drive.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields="id, webViewLink"
+        ).execute()
+    except Exception as e:
+        print("❌ Drive upload error:", e)
+        return await interaction.followup.send("Failed to upload file to Drive.", ephemeral=True)
+
+    link = created.get("webViewLink") or f"https://drive.google.com/file/d/{created['id']}/view"
+    await interaction.followup.send(f"✅ Uploaded to Google Drive:\n{link}")
+
+
+@bot.tree.command(name="gdrive_list", description="List your most recent files in Google Drive.")
+async def gdrive_list_slash(interaction: discord.Interaction, limit: int = 5):
+    await interaction.response.defer(thinking=True)
+
+    drive = build_google_service("drive", "v3")
+    if not drive:
+        return await interaction.followup.send("Google Drive is not configured.", ephemeral=True)
+
+    limit = max(1, min(limit, 10))
+
+    try:
+        result = drive.files().list(
+            pageSize=limit,
+            fields="files(id, name, webViewLink)",
+            orderBy="modifiedTime desc"
+        ).execute()
+    except Exception as e:
+        print("❌ Drive list error:", e)
+        return await interaction.followup.send("Failed to list files from Drive.", ephemeral=True)
+
+    files = result.get("files", [])
+    if not files:
+        return await interaction.followup.send("No files found on Drive.", ephemeral=True)
+
+    lines = ["**Recent Google Drive files:**"]
+    for f in files:
+        name = f["name"]
+        link = f.get("webViewLink") or f"https://drive.google.com/file/d/{f['id']}/view"
+        lines.append(f"- [{name}]({link})")
+
+    await interaction.followup.send("\n".join(lines))
+###############################################################
+# YOUTUBE COMMANDS
+###############################################################
+
+@bot.tree.command(name="gyt_search", description="Search YouTube videos.")
+async def gyt_search_slash(interaction: discord.Interaction, query: str, limit: int = 5):
+    await interaction.response.defer(thinking=True)
+
+    yt = build_youtube_service()
+    if not yt:
+        return await interaction.followup.send("YouTube API not configured (check YOUTUBE_API_KEY).", ephemeral=True)
+
+    limit = max(1, min(limit, 10))
+
+    try:
+        resp = yt.search().list(
+            q=query,
+            part="snippet",
+            maxResults=limit,
+            type="video"
+        ).execute()
+    except Exception as e:
+        print("❌ YouTube search error:", e)
+        return await interaction.followup.send("Failed to search YouTube.", ephemeral=True)
+
+    items = resp.get("items", [])
+    if not items:
+        return await interaction.followup.send("No YouTube results found.", ephemeral=True)
+
+    lines = [f"**YouTube results for:** `{query}`"]
+    for it in items:
+        title = it["snippet"]["title"]
+        vid = it["id"]["videoId"]
+        url = f"https://www.youtube.com/watch?v={vid}"
+        lines.append(f"- [{title}]({url})")
+
+    await interaction.followup.send("\n".join(lines))
+###############################################################
+# GOOGLE CALENDAR COMMANDS
+###############################################################
+
+@bot.tree.command(name="gcal_events", description="List upcoming Google Calendar events.")
+async def gcal_events_slash(interaction: discord.Interaction, max_events: int = 5):
+    await interaction.response.defer(thinking=True)
+
+    cal = build_google_service("calendar", "v3")
+    if not cal:
+        return await interaction.followup.send("Google Calendar not configured.", ephemeral=True)
+
+    max_events = max(1, min(max_events, 10))
+
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+
+    try:
+        events_result = cal.events().list(
+            calendarId="primary",
+            timeMin=now,
+            maxResults=max_events,
+            singleEvents=True,
+            orderBy="startTime"
+        ).execute()
+    except Exception as e:
+        print("❌ Calendar list error:", e)
+        return await interaction.followup.send("Failed to fetch calendar events.", ephemeral=True)
+
+    events = events_result.get("items", [])
+    if not events:
+        return await interaction.followup.send("No upcoming events found.", ephemeral=True)
+
+    lines = ["**Upcoming events (Google Calendar):**"]
+    for ev in events:
+        start = ev["start"].get("dateTime", ev["start"].get("date", ""))
+        summary = ev.get("summary", "(no title)")
+        lines.append(f"- `{start}` — {summary}")
+
+    await interaction.followup.send("\n".join(lines))
+###############################################################
+# GOOGLE DOCS COMMANDS
+###############################################################
+
+@bot.tree.command(name="gdoc_create", description="Create a Google Doc with a title and content.")
+async def gdoc_create_slash(interaction: discord.Interaction, title: str, content: str):
+    await interaction.response.defer(thinking=True)
+
+    docs = build_google_service("docs", "v1")
+    if not docs:
+        return await interaction.followup.send("Google Docs not configured.", ephemeral=True)
+
+    try:
+        doc = docs.documents().create(body={"title": title}).execute()
+        doc_id = doc["documentId"]
+
+        docs.documents().batchUpdate(
+            documentId=doc_id,
+            body={
+                "requests": [
+                    {
+                        "insertText": {
+                            "location": {"index": 1},
+                            "text": content
+                        }
+                    }
+                ]
+            },
+        ).execute()
+    except Exception as e:
+        print("❌ Docs create error:", e)
+        return await interaction.followup.send("Failed to create Google Doc.", ephemeral=True)
+
+    link = f"https://docs.google.com/document/d/{doc_id}/edit"
+    await interaction.followup.send(f"📄 Google Doc created:\n{link}")
+###############################################################
+# GOOGLE SHEETS COMMANDS
+###############################################################
+
+@bot.tree.command(
+    name="gsheet_append",
+    description="Append a row of values to a Google Sheet."
+)
+async def gsheet_append_slash(
+    interaction: discord.Interaction,
+    sheet_id: str,
+    range_a1: str,
+    values_csv: str,
+):
+    """
+    sheet_id: the spreadsheet ID (from the URL)
+    range_a1: e.g. 'Sheet1!A1:D1'
+    values_csv: comma-separated values for the row
+    """
+    await interaction.response.defer(thinking=True)
+
+    sheets = build_google_service("sheets", "v4")
+    if not sheets:
+        return await interaction.followup.send("Google Sheets not configured.", ephemeral=True)
+
+    values = [[v.strip() for v in values_csv.split(",")]]
+
+    body = {"values": values}
+
+    try:
+        sheets.spreadsheets().values().append(
+            spreadsheetId=sheet_id,
+            range=range_a1,
+            valueInputOption="USER_ENTERED",
+            body=body,
+        ).execute()
+    except Exception as e:
+        print("❌ Sheets append error:", e)
+        return await interaction.followup.send("Failed to append to Google Sheet.", ephemeral=True)
+
+    await interaction.followup.send("✅ Row appended to Google Sheet.")
 
 ###############################################################
 # 9. ERROR HANDLING INFRASTRUCTURE
@@ -2920,6 +3259,81 @@ async def progress_report_slash(interaction: discord.Interaction):
 ###############################################################
 
 print("📦 Loaded CHUNK 6 (Admin + coordination suite + progression tracking)")
+###############################################
+# CEIL BOT — GOOGLE CENTER (Dashboard + Commands)
+###############################################
+
+class GoogleCenterView(View):
+    def __init__(self):
+        super().__init__(timeout=300)
+
+    @discord.ui.button(label="Drive", style=discord.ButtonStyle.primary, custom_id="gc_drive")
+    async def drive_button(self, interaction: discord.Interaction, button: Button):
+        text = (
+            "**Google Drive commands:**\n"
+            "- `/gdrive_upload` — upload a Discord file to Drive\n"
+            "- `/gdrive_list` — list recent files\n"
+        )
+        await interaction.response.send_message(text, ephemeral=True)
+
+    @discord.ui.button(label="YouTube", style=discord.ButtonStyle.primary, custom_id="gc_youtube")
+    async def youtube_button(self, interaction: discord.Interaction, button: Button):
+        text = (
+            "**YouTube commands:**\n"
+            "- `/gyt_search` — search YouTube videos\n"
+        )
+        await interaction.response.send_message(text, ephemeral=True)
+
+    @discord.ui.button(label="Calendar", style=discord.ButtonStyle.primary, custom_id="gc_calendar")
+    async def calendar_button(self, interaction: discord.Interaction, button: Button):
+        text = (
+            "**Google Calendar commands:**\n"
+            "- `/gcal_events` — list upcoming events\n"
+        )
+        await interaction.response.send_message(text, ephemeral=True)
+
+    @discord.ui.button(label="Docs", style=discord.ButtonStyle.secondary, custom_id="gc_docs")
+    async def docs_button(self, interaction: discord.Interaction, button: Button):
+        text = (
+            "**Google Docs commands:**\n"
+            "- `/gdoc_create` — create a doc with given title + content\n"
+        )
+        await interaction.response.send_message(text, ephemeral=True)
+
+    @discord.ui.button(label="Sheets", style=discord.ButtonStyle.secondary, custom_id="gc_sheets")
+    async def sheets_button(self, interaction: discord.Interaction, button: Button):
+        text = (
+            "**Google Sheets commands:**\n"
+            "- `/gsheet_append` — append a row of values to a sheet\n"
+        )
+        await interaction.response.send_message(text, ephemeral=True)
+
+
+@bot.tree.command(
+    name="google_center",
+    description="Open the Google integration control panel (Drive, YouTube, Calendar, Docs, Sheets)."
+)
+async def google_center_slash(interaction: discord.Interaction):
+    # If you want this to be staff-only, uncomment:
+    # if not isinstance(interaction.user, discord.Member) or not is_staff(interaction.user):
+    #     return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+    embed = make_embed(
+        title="🌐 Google Center",
+        description=(
+            "Control panel for all Google integrations:\n"
+            "- Drive: upload/list files\n"
+            "- YouTube: search videos\n"
+            "- Calendar: view events\n"
+            "- Docs: generate documents from CEIL content\n"
+            "- Sheets: log progression / XP / attendance\n\n"
+            "Use the buttons below to see available commands."
+        ),
+        color=discord.Color.blurple(),
+    )
+    view = GoogleCenterView()
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
 ###############################################
 # CEIL BOT — FULL MAX EDITION (Chunk 7/8)
 # IMAGE ANALYSIS + PDF/FILE TOOLS + AI ON-MESSAGE ENGINE
