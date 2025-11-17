@@ -2,6 +2,7 @@
 # CEIL BOT — FULL MAX EDITION (Chunk 1/8)
 # SYSTEM BOOT + CONFIG + UTILITIES + XP ENGINE
 ###############################################
+from google.oauth2.service_account import Credentials as GoogleServiceAccountCredentials
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -20,6 +21,50 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from openai import OpenAI
+import base64
+import json
+from google.oauth2.service_account import Credentials
+
+GOOGLE_CREDS_BASE64 = os.getenv("GOOGLE_CREDS_BASE64")
+
+google_credentials = None
+if GOOGLE_CREDS_BASE64:
+    try:
+        decoded = base64.b64decode(GOOGLE_CREDS_BASE64)
+        data = json.loads(decoded)
+
+        google_credentials = Credentials.from_service_account_info(
+            data,
+            scopes=[
+                "https://www.googleapis.com/auth/drive",
+                "https://www.googleapis.com/auth/documents",
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/youtube.force-ssl",
+                "https://www.googleapis.com/auth/calendar",
+            ]
+        )
+
+    except Exception as e:
+        print("❌ Failed to parse Google credentials:", e)
+GOOGLE_READY = google_credentials is not None
+
+if GOOGLE_READY:
+    try:
+        from googleapiclient.discovery import build
+
+        drive_service = build("drive", "v3", credentials=google_credentials)
+        docs_service = build("docs", "v1", credentials=google_credentials)
+        sheets_service = build("sheets", "v4", credentials=google_credentials)
+        calendar_service = build("calendar", "v3", credentials=google_credentials)
+
+        print("✅ Google services initialized.")
+
+    except Exception as e:
+        print("❌ Failed to build Google API clients:", e)
+        GOOGLE_READY = False
+else:
+    print("❌ No Google credentials provided.")
+
 # ============ FIX: GUARANTEE admin_group ALWAYS EXISTS ============
 # Some chunks load out of order during Railway hot reloads.
 # This ensures admin_group exists BEFORE any decorators use it.
@@ -3930,6 +3975,18 @@ async def help_slash(interaction: discord.Interaction):
     embed.set_footer(text="CEIL Bot — Full Max Edition")
 
     await interaction.response.send_message(embed=embed, ephemeral=False)
+text_research = (
+    "**Research & Academic Commands**\n"
+    "`/article_summary` — Summarize an academic article\n"
+    "`/research_outline` — Generate a research plan (MA/PhD/Article)\n"
+    "`/compare_theories` — Compare two theories or scholars\n"
+    "`/apa_cite` — Generate APA citation\n"
+    "`/explain_theory` — Explain a linguistic/research concept\n"
+    "`/translate_academic` — Translate text into academic English\n"
+    "`/evaluate_paper` — Critically evaluate a paper\n"
+    "`/literature_review` — Short literature review\n"
+    "`/supervisor_feedback` — Supervisor-style feedback on a proposal\n"
+)
 
 
 ###############################################################
