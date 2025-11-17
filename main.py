@@ -9,6 +9,7 @@ from googleapiclient.discovery import build
 import base64
 import json
 
+
 import os
 import json
 import time
@@ -25,7 +26,11 @@ import base64
 import json
 from google.oauth2.service_account import Credentials
 
+GOOGLE_APPLICATION_CREDENTIALS_BASE64=long_base64_credentials_json
+GOOGLE_PROJECT_ID=xxxx
+GOOGLE_SERVICE_EMAIL=xxxx@xxxx.iam.gserviceaccount.com
 GOOGLE_CREDS_BASE64 = os.getenv("GOOGLE_CREDS_BASE64")
+YOUTUBE_API_KEY=xxxx
 
 google_credentials = None
 if GOOGLE_CREDS_BASE64:
