@@ -271,6 +271,10 @@ def build_admin_dashboard_embed() -> discord.Embed:
         inline=False,
     )
     return embed
+    # Discord UI components (must be imported BEFORE the dashboard)
+from discord.ui import View, Button, Select, Modal, TextInput
+from discord import TextStyle
+
 class FeatureToggleSelect(Select):
     def __init__(self):
         options = [
