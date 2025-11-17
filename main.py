@@ -26,11 +26,11 @@ import base64
 import json
 from google.oauth2.service_account import Credentials
 
-GOOGLE_APPLICATION_CREDENTIALS_BASE64 = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64")
-GOOGLE_PROJECT_ID=xxxx
-GOOGLE_SERVICE_EMAIL=xxxx@xxxx.iam.gserviceaccount.com
-GOOGLE_CREDS_BASE64 = os.getenv("GOOGLE_CREDS_BASE64")
-YOUTUBE_API_KEY=xxxx
+# ===== GOOGLE / YOUTUBE CONFIG VIA ENV VARS =====
+GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID", "")
+GOOGLE_APPLICATION_CREDENTIALS_BASE64 = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64", "")
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+
 
 google_credentials = None
 if GOOGLE_CREDS_BASE64:
