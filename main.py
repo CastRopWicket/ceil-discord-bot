@@ -33,7 +33,7 @@ YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 
 
 google_credentials = None
-if GOOGLE_CREDS_BASE64:
+if GOOGLE_APPLICATION_CREDENTIALS_BASE64 = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64", "")
     try:
         decoded = base64.b64decode(GOOGLE_CREDS_BASE64)
         data = json.loads(decoded)
