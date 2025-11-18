@@ -424,49 +424,6 @@ def build_admin_dashboard_embed() -> discord.Embed:
         ),
         inline=False,
     )
-    ###############################################################
-# COINS COMMANDS (Blackjack currency)
-###############################################################
-
-@bot.command(name="coins")
-async def coins_command(ctx: commands.Context, member: discord.Member | None = None):
-    """
-    Show your coins or another member's coins.
-    """
-    target = member or ctx.author
-    amount = get_coins(target.id)
-    if target.id == ctx.author.id:
-        msg = f"💰 You have **{amount}** coins."
-    else:
-        msg = f"💰 {target.mention} has **{amount}** coins."
-    await ctx.reply(msg, mention_author=False)
-
-
-@bot.command(name="setcoins")
-@staff_only()
-async def setcoins_command(ctx: commands.Context, member: discord.Member, amount: int):
-    """
-    Staff: set the exact number of coins for a user.
-    """
-    set_coins(member.id, amount)
-    await ctx.reply(
-        f"✅ Set {member.mention}'s coins to **{get_coins(member.id)}**.",
-        mention_author=False,
-    )
-
-
-@bot.command(name="addcoins")
-@staff_only()
-async def addcoins_command(ctx: commands.Context, member: discord.Member, delta: int):
-    """
-    Staff: add/remove coins from a user.
-    """
-    new_amount = add_coins(member.id, delta)
-    sign = "+" if delta >= 0 else ""
-    await ctx.reply(
-        f"✅ Updated {member.mention}'s coins: {sign}{delta}. New balance: **{new_amount}**.",
-        mention_author=False,
-    )
 
     return embed
     # Discord UI components (must be imported BEFORE the dashboard)
