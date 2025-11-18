@@ -24,17 +24,7 @@ from discord import app_commands
 from openai import OpenAI
 from discord.ui import View, Button, Select
 from discord import SelectOption
-# === GROK (xAI) SUPPORT - MINIMUM VERSION ===
-from openai import AsyncOpenAI
 
-# Create Grok client if you added the key in Railway
-grok_client = None
-if os.getenv("XAI_API_KEY"):
-    grok_client = AsyncOpenAI(
-        api_key=os.getenv("XAI_API_KEY"),
-        base_url="https://api.x.ai/v1"
-    )
-    print("✅ Grok (xAI) is active – bot will use Grok-4")
 # =============== GOOGLE CENTER BASE CONFIG ==================
 
 import base64
@@ -164,11 +154,9 @@ if not DISCORD_TOKEN:
         "Set it before running the bot."
     )
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # can be missing now
-
-if not OPENAI_API_KEY and not os.getenv("XAI_API_KEY"):
+if not OPENAI_API_KEY:
     raise RuntimeError(
-        "❌ ERROR: You need at least ONE API key: OPENAI_API_KEY or XAI_API_KEY"
+        "❌ ERROR: OPENAI_API_KEY environment variable is missing."
     )
 
 ###############################################################
@@ -298,45 +286,33 @@ def save_config():
 # 4. OPENAI — Unified LLM Client Wrapper
 ###############################################################
 
-client_oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+client_oai = OpenAI(api_key=OPENAI_API_KEY)
 
 
 async def call_openai(system_prompt: str, user_prompt: str, temperature: float = 0.4):
-    # Use Grok first
-    if grok_client:
-        try:
-            response = await grok_client.chat.completions.create(
-                model=os.getenv("GROK_PRIMARY_MODEL", "grok-4"),
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=temperature,
-                max_tokens=4096
-            )
-            reply = response.choices[0].message.content.strip()
-            if len(reply) > 1900:
-                reply = reply[:1900] + "\n\n[...truncated]"
-            return reply
-        except Exception as e:
-            print(f"Grok failed ({e}), falling back to OpenAI...")
-
-    # Old OpenAI code (keeps working as backup)
+    """
+    Safely call OpenAI with error handling and resiliency.
+    Returns the LLM output text.
+    """
     try:
         response = client_oai.chat.completions.create(
-            model=config.get("ai_model", "gpt-4o-mini"),
+            model=config.get("ai_model", "gpt-4.1-mini"),
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
-            temperature=temperature
+            temperature=temperature,
         )
-        reply = response.choices[0].message.content.strip()
-        if len(reply) > 1900:
-            reply = reply[:1900] + "\n\n[...truncated]"
-        return reply
-    except:
-        return "AI is temporarily unavailable."
+        content = response.choices[0].message.content.strip()
+        max_len = config.get("max_reply_length", 1900)
+        if len(content) > max_len:
+            content = content[:max_len] + "\n\n[Truncated]"
+        return content
+
+    except Exception as e:
+        print("❌ OPENAI API ERROR:", e)
+        traceback.print_exc()
+        return "⚠ Sorry, I encountered an error while processing your request."
 
 
 ###############################################################
@@ -6085,4 +6061,3 @@ if __name__ == "__main__":
 
     print("🚀 Starting CEIL Full-Max Bot...")
     bot.run(DISCORD_TOKEN)
-
