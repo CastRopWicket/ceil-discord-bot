@@ -296,7 +296,7 @@ def save_config():
 # 4. OPENAI — Unified LLM Client Wrapper
 ###############################################################
 
-client_oai = OpenAI(api_key=OPENAI_API_KEY)
+client_oai = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 
 async def call_openai(system_prompt: str, user_prompt: str, temperature: float = 0.4):
