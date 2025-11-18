@@ -3789,22 +3789,6 @@ async def admin_xp_show_slash(
     member="Target member",
     amount="New coin balance"
 )
-async def admin_coins_set_slash(
-    interaction: discord.Interaction,
-    member: discord.Member,
-    amount: int,
-):
-    if not isinstance(interaction.user, discord.Member) or not is_staff(interaction.user):
-        return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
-
-    if amount < 0:
-        amount = 0
-
-    set_coins(member.id, amount)
-    await interaction.response.send_message(
-        f"✅ Set {member.mention}'s coins to **{amount}**.",
-        ephemeral=True,
-    )
 
 
 @admin_group.command(
