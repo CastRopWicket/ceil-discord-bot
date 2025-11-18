@@ -2067,22 +2067,22 @@ async def observation_form_slash(
     skill="Main skill (reading, writing, listening, speaking)",
     objective="Specific learning objective / CAN-DO statement",
 )
-        # Make sure old LOA commands don't conflict
+
+# ===== LOA TASK GENERATOR =====
+        ## ===== LOA FIX: REMOVE OLD SLASH COMMANDS =====
 try:
     bot.tree.remove_command("loa_task")
-except Exception:
+except:
     pass
-
 try:
     bot.tree.remove_command("loa_rubric")
-except Exception:
+except:
     pass
-
 try:
     bot.tree.remove_command("loa_feedback")
-except Exception:
+except:
     pass
-
+# ==============================================
 
 async def loa_task_slash(
     interaction: discord.Interaction,
