@@ -4370,7 +4370,7 @@ class DashboardSectionSelect(Select):
                 f"- Logging: {'✅' if config.get('logging_enabled', True) else '❌'}\n"
             )
             embed = dashboard_embed("🛡️ Moderation & Safety", desc, color=discord.Color.red())
-    async def callback(self, interaction: discord.Interaction, select: DashboardSectionSelect):
+    async def callback(self, interaction: discord.Interaction, select: "DashboardSectionSelect"):
         section = select.values[0]
 
         if section == "general":
