@@ -2067,6 +2067,23 @@ async def observation_form_slash(
     skill="Main skill (reading, writing, listening, speaking)",
     objective="Specific learning objective / CAN-DO statement",
 )
+        # Make sure old LOA commands don't conflict
+try:
+    bot.tree.remove_command("loa_task")
+except Exception:
+    pass
+
+try:
+    bot.tree.remove_command("loa_rubric")
+except Exception:
+    pass
+
+try:
+    bot.tree.remove_command("loa_feedback")
+except Exception:
+    pass
+
+
 async def loa_task_slash(
     interaction: discord.Interaction,
     level: str,
@@ -2738,10 +2755,26 @@ async def analyze_pdf_slash(interaction: discord.Interaction, text: str):
 ###############################################################
 
 print("📦 Loaded CHUNK 4 (Advanced research & academic tools)")
-# ============ FIX: REMOVE DUPLICATE COMMANDS ============
-for cmd_name in ["hangman", "guess", "blackjack", "hit", "stand", "trivia", "answer"]:
-    if cmd_name in bot.commands:
+# ============ FIX: REMOVE DUPLICATE PREFIX COMMANDS ============
+# Make sure we don't double-register commands from older versions.
+for cmd_name in [
+    "hangman",
+    "guess",
+    "blackjack",
+    "hit",
+    "stand",
+    "trivia",
+    "answer",
+    "coins",
+    "addcoins",
+    "setcoins",
+    "daily",
+]:
+    existing = bot.get_command(cmd_name)
+    if existing:
         bot.remove_command(cmd_name)
+# ================================================================
+
 
 ###############################################
 # CEIL BOT — FULL MAX EDITION (Chunk 5/8)
