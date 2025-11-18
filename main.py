@@ -642,82 +642,52 @@ def get_xp_profile(user_id: int):
         return (0, 1)
     return xp_data[uid]["xp"], xp_data[uid]["level"]
 ###############################################################
-# GOOGLE CENTER CORE — AUTH + SERVICE HELPERS
+# GOOGLE CENTER (Drive + Calendar + YouTube)
 ###############################################################
+import base64
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
-GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+GOOGLE_APPLICATION_CREDENTIALS_BASE64 = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64", "")
+GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID", "")
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 
-GOOGLE_SCOPES = [
-    "https://www.googleapis.com/auth/drive",
-    "https://www.googleapis.com/auth/documents",
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/calendar",
-]
+GOOGLE_READY = False
+google_credentials = None
+google_drive = None
+google_calendar = None
+google_youtube = None
 
-google_creds_cache = None
+try:
+    if GOOGLE_APPLICATION_CREDENTIALS_BASE64:
+        decoded_json = base64.b64decode(GOOGLE_APPLICATION_CREDENTIALS_BASE64).decode("utf-8")
+        creds_dict = json.loads(decoded_json)
 
-
-def get_google_credentials():
-    """
-    Load and cache Google service account credentials from
-    GOOGLE_SERVICE_ACCOUNT_JSON env var.
-    """
-    global google_creds_cache
-
-    if google_creds_cache is not None:
-        return google_creds_cache
-
-    if not GOOGLE_SERVICE_ACCOUNT_JSON:
-        print("⚠ GOOGLE_SERVICE_ACCOUNT_JSON is not set. Google Center disabled.")
-        return None
-
-    try:
-        info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
-        creds = GoogleServiceAccountCredentials.from_service_account_info(
-            info,
-            scopes=GOOGLE_SCOPES,
+        google_credentials = service_account.Credentials.from_service_account_info(
+            creds_dict,
+            scopes=[
+                "https://www.googleapis.com/auth/drive",
+                "https://www.googleapis.com/auth/calendar",
+                "https://www.googleapis.com/auth/youtube.force-ssl"
+            ]
         )
-        google_creds_cache = creds
-        print("✅ Google service account loaded.")
-        return creds
-    except Exception as e:
-        print("❌ Failed to load Google credentials:", e)
-        return None
 
+        google_drive = build("drive", "v3", credentials=google_credentials)
+        google_calendar = build("calendar", "v3", credentials=google_credentials)
 
-def build_google_service(api_name: str, api_version: str):
-    """
-    Build a Google API service client.
-    Used for Drive, Docs, Sheets, Calendar.
-    """
-    creds = get_google_credentials()
-    if not creds:
-        return None
+        if YOUTUBE_API_KEY:
+            google_youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
+        else:
+            print("⚠ YOUTUBE_API_KEY not set — YouTube disabled.")
 
-    try:
-        service = google_build(api_name, api_version, credentials=creds)
-        return service
-    except Exception as e:
-        print(f"❌ Failed to build Google service {api_name} {api_version}: {e}")
-        return None
+        GOOGLE_READY = True
+        print("✅ Google services initialized.")
 
+    else:
+        print("⚠ GOOGLE_APPLICATION_CREDENTIALS_BASE64 not set — Google Center disabled.")
+except Exception as e:
+    print("❌ Google initialization failed:", e)
 
-def build_youtube_service():
-    """
-    Build a YouTube Data API client using API key.
-    (YouTube is easier with API key than service accounts.)
-    """
-    if not YOUTUBE_API_KEY:
-        print("⚠ YOUTUBE_API_KEY not set.")
-        return None
-
-    try:
-        service = google_build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
-        return service
-    except Exception as e:
-        print("❌ Failed to build YouTube service:", e)
-        return None
 ###############################################################
 # GOOGLE DRIVE COMMANDS
 ###############################################################
