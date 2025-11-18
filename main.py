@@ -4298,19 +4298,27 @@ class DashboardMainView(View):
 class DashboardSectionSelect(Select):
     def __init__(self):
         options = [
-            SelectOption(label="General Settings", value="general", description="Feature toggles, core config"),
-            SelectOption(label="AI Engine", value="ai", description="AI modes, auto-reply, languages"),
-            SelectOption(label="Teacher Suite", value="teacher", description="Lesson tools, progression, reports"),
-            SelectOption(label="Moderation", value="mod", description="Auto-moderation, spam, logging"),
-            SelectOption(label="Economy & Games", value="games", description="XP, coins, fun engine"),
-            SelectOption(label="Google Center", value="google", description="Drive, Calendar, YouTube status"),
+            SelectOption(label="General overview", value="general", description="Status, ping, uptime"),
+            SelectOption(label="Teacher suite", value="teacher", description="AI teacher tools & PD"),
+            SelectOption(label="Moderation", value="mod", description="Filters, slowmode, logs"),
+
+            # 🔹 NEW: Users / Moderation section
+            SelectOption(
+                label="Users / Moderation",
+                value="users",
+                description="View members + timeout / kick",
+            ),
+
+            SelectOption(label="Games & XP", value="games", description="Blackjack, XP, fun"),
+            SelectOption(label="Google Center", value="google", description="Drive, Docs, YouTube"),
         ]
         super().__init__(
-            placeholder="Select a dashboard section…",
+            placeholder="Select dashboard section…",
             min_values=1,
             max_values=1,
             options=options,
         )
+
 
     async def callback(self, interaction: discord.Interaction):
         if not await ensure_admin_interaction(interaction):
@@ -4362,6 +4370,62 @@ class DashboardSectionSelect(Select):
                 f"- Logging: {'✅' if config.get('logging_enabled', True) else '❌'}\n"
             )
             embed = dashboard_embed("🛡️ Moderation & Safety", desc, color=discord.Color.red())
+    async def callback(self, interaction: discord.Interaction, select: DashboardSectionSelect):
+        section = select.values[0]
+
+        if section == "general":
+            # existing code...
+            ...
+        elif section == "teacher":
+            # existing code...
+            ...
+        elif section == "mod":
+            # existing code...
+            ...
+
+        # 🔹 NEW: Users / Moderation dashboard section
+        elif section == "users":
+            guild = interaction.guild
+            total = guild.member_count if guild is not None else 0
+            bots = 0
+            humans = 0
+            timed_out = 0
+
+            if guild is not None:
+                for m in guild.members:
+                    if m.bot:
+                        bots += 1
+                    else:
+                        humans += 1
+                    # discord.py v2 way to check timeout
+                    comm_until = getattr(m, "communication_disabled_until", None)
+                    if comm_until is not None:
+                        timed_out += 1
+
+            desc = (
+                "👥 **User overview & quick moderation**\n\n"
+                f"• Total members: **{total}**\n"
+                f"• Humans: **{humans}** | Bots: **{bots}**\n"
+                f"• Timed-out members (approx): **{timed_out}**\n\n"
+                "Use the buttons below to **timeout / un-timeout / kick** a member "
+                "using their ID or a mention. All actions require proper Discord permissions "
+                "(Moderate Members / Kick Members).\n"
+            )
+
+            embed = dashboard_embed(
+                title="👥 Users & Moderation",
+                description=desc,
+                color=discord.Color.blurple(),
+            )
+            view = UserModerationView()
+            await interaction.response.edit_message(embed=embed, view=view)
+
+        elif section == "games":
+            # existing code...
+            ...
+        elif section == "google":
+            # existing code...
+            ...
 
         elif section == "games":
             view = GamesSettingsView()
@@ -4618,6 +4682,252 @@ class ModerationSettingsView(View):
         self.add_item(ToggleFeatureButton("Moderation", "moderation_enabled", row=0))
         self.add_item(ToggleFeatureButton("Logging", "logging_enabled", row=0))
         self.add_item(BackToMainButton(row=1))
+# ============================
+# USERS / MODERATION DASHBOARD
+# ============================
+
+class UserModerationView(View):
+    """Dashboard panel for per-user moderation shortcuts."""
+
+    def __init__(self):
+        super().__init__(timeout=180)
+        # Main action buttons
+        self.add_item(TimeoutUserButton(row=0))
+        self.add_item(UnTimeoutUserButton(row=0))
+        self.add_item(KickUserButton(row=1))
+        # Back to main dashboard
+        self.add_item(BackToMainButton(row=2))
+
+
+class TimeoutUserButton(Button):
+    def __init__(self, row: int = 0):
+        super().__init__(
+            label="Timeout user",
+            style=discord.ButtonStyle.danger,
+            emoji="⏱️",
+            row=row,
+        )
+class UserTimeoutModal(Modal):
+    def __init__(self):
+        super().__init__(title="Timeout a user")
+
+        self.user_field = TextInput(
+            label="User (ID or mention)",
+            placeholder="@user or 123456789012345678",
+            required=True,
+            max_length=64,
+        )
+        self.minutes_field = TextInput(
+            label="Duration in minutes",
+            placeholder="e.g. 10",
+            required=True,
+            max_length=5,
+        )
+        self.reason_field = TextInput(
+            label="Reason (optional)",
+            placeholder="Spamming, abuse, etc.",
+            required=False,
+            style=discord.TextStyle.paragraph,
+            max_length=200,
+        )
+
+        self.add_item(self.user_field)
+        self.add_item(self.minutes_field)
+        self.add_item(self.reason_field)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message(
+                "This can only be used inside a server.", ephemeral=True
+            )
+            return
+
+        if not interaction.user.guild_permissions.moderate_members:
+            await interaction.response.send_message(
+                "You need the **Moderate Members** permission to use this.",
+                ephemeral=True,
+            )
+            return
+
+        member = await resolve_member_from_input(guild, self.user_field.value)
+        if member is None:
+            await interaction.response.send_message(
+                "I couldn’t find that user in this server.", ephemeral=True
+            )
+            return
+
+        try:
+            minutes = int(self.minutes_field.value.strip())
+            if minutes <= 0:
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message(
+                "Duration must be a **positive integer** number of minutes.",
+                ephemeral=True,
+            )
+            return
+
+        from datetime import datetime, timedelta, timezone
+
+        until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+        reason = self.reason_field.value.strip() or "Timeout via dashboard"
+
+        try:
+            await member.edit(communication_disabled_until=until, reason=reason)
+            await interaction.response.send_message(
+                f"⏱️ Timed out {member.mention} for **{minutes} minutes**.",
+                ephemeral=True,
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "I don’t have permission to timeout this member (check role hierarchy).",
+                ephemeral=True,
+            )
+        except Exception as e:
+            await interaction.response.send_message(
+                f"Timeout failed: `{e}`", ephemeral=True
+            )
+
+
+class UserUnTimeoutModal(Modal):
+    def __init__(self):
+        super().__init__(title="Remove timeout")
+
+        self.user_field = TextInput(
+            label="User (ID or mention)",
+            placeholder="@user or 123456789012345678",
+            required=True,
+            max_length=64,
+        )
+        self.add_item(self.user_field)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message(
+                "This can only be used inside a server.", ephemeral=True
+            )
+            return
+
+        if not interaction.user.guild_permissions.moderate_members:
+            await interaction.response.send_message(
+                "You need the **Moderate Members** permission to use this.",
+                ephemeral=True,
+            )
+            return
+
+        member = await resolve_member_from_input(guild, self.user_field.value)
+        if member is None:
+            await interaction.response.send_message(
+                "I couldn’t find that user in this server.", ephemeral=True
+            )
+            return
+
+        try:
+            await member.edit(communication_disabled_until=None, reason="Timeout cleared via dashboard")
+            await interaction.response.send_message(
+                f"✅ Removed timeout from {member.mention}.", ephemeral=True
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "I don’t have permission to modify this member (check role hierarchy).",
+                ephemeral=True,
+            )
+        except Exception as e:
+            await interaction.response.send_message(
+                f"Failed to remove timeout: `{e}`", ephemeral=True
+            )
+
+
+class UserKickModal(Modal):
+    def __init__(self):
+        super().__init__(title="Kick user")
+
+        self.user_field = TextInput(
+            label="User (ID or mention)",
+            placeholder="@user or 123456789012345678",
+            required=True,
+            max_length=64,
+        )
+        self.reason_field = TextInput(
+            label="Reason (optional)",
+            placeholder="Breaking rules, etc.",
+            required=False,
+            style=discord.TextStyle.paragraph,
+            max_length=200,
+        )
+        self.add_item(self.user_field)
+        self.add_item(self.reason_field)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message(
+                "This can only be used inside a server.", ephemeral=True
+            )
+            return
+
+        if not interaction.user.guild_permissions.kick_members:
+            await interaction.response.send_message(
+                "You need the **Kick Members** permission to use this.",
+                ephemeral=True,
+            )
+            return
+
+        member = await resolve_member_from_input(guild, self.user_field.value)
+        if member is None:
+            await interaction.response.send_message(
+                "I couldn’t find that user in this server.", ephemeral=True
+            )
+            return
+
+        reason = self.reason_field.value.strip() or "Kicked via dashboard"
+
+        try:
+            await member.kick(reason=reason)
+            await interaction.response.send_message(
+                f"👢 Kicked {member.mention}.", ephemeral=True
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "I don’t have permission to kick this member (check role hierarchy).",
+                ephemeral=True,
+            )
+        except Exception as e:
+            await interaction.response.send_message(
+                f"Kick failed: `{e}`", ephemeral=True
+            )
+
+    async def callback(self, interaction: discord.Interaction):
+        # Open timeout modal
+        await interaction.response.send_modal(UserTimeoutModal())
+
+
+class UnTimeoutUserButton(Button):
+    def __init__(self, row: int = 0):
+        super().__init__(
+            label="Un-timeout user",
+            style=discord.ButtonStyle.success,
+            emoji="✅",
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(UserUnTimeoutModal())
+
+
+class KickUserButton(Button):
+    def __init__(self, row: int = 1):
+        super().__init__(
+            label="Kick user",
+            style=discord.ButtonStyle.danger,
+            emoji="👢",
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(UserKickModal())
 
 
 ###############################################
