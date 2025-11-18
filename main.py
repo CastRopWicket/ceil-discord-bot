@@ -63,10 +63,6 @@ if GOOGLE_APPLICATION_CREDENTIALS_BASE64:
 else:
     print("⚠ No GOOGLE_APPLICATION_CREDENTIALS_BASE64 provided.")
 
-    except Exception as e:
-        print("❌ Failed to parse Google credentials:", e)
-GOOGLE_READY = google_credentials is not None
-
 if GOOGLE_READY:
     try:
         from googleapiclient.discovery import build
