@@ -689,6 +689,91 @@ def get_xp_profile(user_id: int):
         return (0, 1)
     return xp_data[uid]["xp"], xp_data[uid]["level"]
     ###############################################################
+# 8b. COINS SYSTEM (LIGHT ECONOMY FOR GAMES)
+###############################################################
+
+COINS_FILE = "coins_data.json"
+coins_data: dict[str, dict] = {}   # { "user_id": { "coins": int, "last_daily": "YYYY-MM-DD" } }
+
+
+def load_coins():
+    """Load coins data from disk."""
+    global coins_data
+    if os.path.exists(COINS_FILE):
+        try:
+            with open(COINS_FILE, "r", encoding="utf-8") as f:
+                coins_data = json.load(f)
+        except Exception:
+            coins_data = {}
+    else:
+        coins_data = {}
+
+
+def save_coins():
+    """Persist coins data."""
+    try:
+        with open(COINS_FILE, "w", encoding="utf-8") as f:
+            json.dump(coins_data, f, indent=2)
+    except Exception as e:
+        print(f"❌ ERROR writing {COINS_FILE}: {e}")
+
+
+def get_coins(user_id: int) -> int:
+    """Return coin balance for user (0 if new)."""
+    uid = str(user_id)
+    if uid not in coins_data:
+        coins_data[uid] = {"coins": 0, "last_daily": None}
+    return int(coins_data[uid].get("coins", 0))
+
+
+def set_coins(user_id: int, amount: int):
+    """Hard set coin balance."""
+    uid = str(user_id)
+    if uid not in coins_data:
+        coins_data[uid] = {"coins": 0, "last_daily": None}
+    coins_data[uid]["coins"] = int(amount)
+    save_coins()
+
+
+def add_coins(user_id: int, amount: int) -> int:
+    """Add (or subtract) coins; returns new balance."""
+    uid = str(user_id)
+    if uid not in coins_data:
+        coins_data[uid] = {"coins": 0, "last_daily": None}
+    coins_data[uid]["coins"] = int(coins_data[uid].get("coins", 0)) + int(amount)
+    save_coins()
+    return coins_data[uid]["coins"]
+
+
+def can_claim_daily(user_id: int) -> bool:
+    """True if user can claim today's daily reward."""
+    uid = str(user_id)
+    from datetime import datetime
+    today = datetime.utcnow().date().isoformat()
+
+    if uid not in coins_data:
+        coins_data[uid] = {"coins": 0, "last_daily": None}
+        return True
+
+    last = coins_data[uid].get("last_daily")
+    return last != today
+
+
+def mark_daily_claim(user_id: int, amount: int) -> int:
+    """Mark daily as claimed and add coins. Returns new balance."""
+    uid = str(user_id)
+    from datetime import datetime
+    today = datetime.utcnow().date().isoformat()
+
+    if uid not in coins_data:
+        coins_data[uid] = {"coins": 0, "last_daily": None}
+
+    coins_data[uid]["last_daily"] = today
+    coins_data[uid]["coins"] = int(coins_data[uid].get("coins", 0)) + int(amount)
+    save_coins()
+    return coins_data[uid]["coins"]
+
+    ###############################################################
 # COIN SYSTEM (for Blackjack + future fun features)
 ###############################################################
 
@@ -1817,6 +1902,142 @@ async def template_slash(interaction: discord.Interaction, kind: str):
     text = await teacher_llm(prompt)
     await interaction.followup.send(text)
 
+###############################################################
+# LEARNING-ORIENTED ASSESSMENT & TEACHER PD AI
+###############################################################
+
+@bot.tree.command(
+    name="loa_task",
+    description="Generate learning-oriented assessment tasks for a unit."
+)
+@app_commands.describe(
+    level="CEFR level (e.g. A2, B1, B2)",
+    objective="Main learning objective (e.g. 'students can describe past experiences')",
+    context="Short context (exam, midterm, regular lesson, online, etc.)"
+)
+async def loa_task_slash(
+    interaction: discord.Interaction,
+    level: str,
+    objective: str,
+    context: str = "regular CEIL lesson",
+):
+    if not config.get("lessons_enabled", True):
+        return await interaction.response.send_message("Lesson tools are disabled.", ephemeral=True)
+
+    await interaction.response.defer(thinking=True)
+
+    prompt = (
+        "You are designing **learning-oriented assessment** (LOA) tasks for an ESL class.\n"
+        f"Level: {level}\n"
+        f"Main objective: {objective}\n"
+        f"Context: {context}\n\n"
+        "Produce:\n"
+        "1) 2–3 short LOA tasks (clearly labeled) that integrate assessment into learning, not just testing.\n"
+        "2) For each task, specify: target sub-skill, procedure, expected output, and simple criteria.\n"
+        "3) Add a final note suggesting how the teacher can use the results for feedback & next steps."
+    )
+
+    result = await teacher_llm(prompt)
+    await interaction.followup.send(result)
+
+
+@bot.tree.command(
+    name="loa_feedback",
+    description="Analyze a student's answer and give LOA-style feedback."
+)
+@app_commands.describe(
+    level="Student level (A1–C1)",
+    prompt_text="The question / task you gave to the student",
+    student_answer="The student's answer"
+)
+async def loa_feedback_slash(
+    interaction: discord.Interaction,
+    level: str,
+    prompt_text: str,
+    student_answer: str,
+):
+    if not config.get("lessons_enabled", True):
+        return await interaction.response.send_message("Lesson tools are disabled.", ephemeral=True)
+
+    await interaction.response.defer(thinking=True)
+
+    prompt = (
+        f"A learner at level {level} answered the following task:\n"
+        f"Teacher prompt:\n{prompt_text}\n\n"
+        f"Student answer:\n{student_answer}\n\n"
+        "Provide LOA-style feedback:\n"
+        "1) Brief positive comment on content/communication.\n"
+        "2) Main language issues (grammar, lexis, discourse) grouped clearly.\n"
+        "3) A partially corrected version (just key sentences, not full rewriting).\n"
+        "4) 2–3 small follow-up tasks the teacher can use to help the learner improve."
+    )
+
+    result = await teacher_llm(prompt)
+    await interaction.followup.send(result)
+
+
+@bot.tree.command(
+    name="pd_coach",
+    description="Get a teacher professional development mini-plan."
+)
+@app_commands.describe(
+    profile="Describe your teaching context, level(s), challenges, and goals."
+)
+async def pd_coach_slash(
+    interaction: discord.Interaction,
+    profile: str,
+):
+    if not config.get("lessons_enabled", True) and not config.get("research_enabled", True):
+        return await interaction.response.send_message("Teacher support tools are disabled.", ephemeral=True)
+
+    await interaction.response.defer(thinking=True)
+
+    prompt = (
+        "You are a Teacher Professional Development coach at CEIL.\n"
+        "Based on the following profile, design a **3–4 week micro PD plan**.\n\n"
+        f"Teacher profile:\n{profile}\n\n"
+        "Include:\n"
+        "- 3 focus areas (e.g., LOA, speaking tasks, feedback, online tools).\n"
+        "- Weekly goals (Week 1..4).\n"
+        "- Concrete classroom experiments to try.\n"
+        "- Reflection questions after each week.\n"
+        "- 2–3 suggested readings or topics to explore (no URLs needed, just titles/keywords)."
+    )
+
+    result = await research_llm(prompt)
+    await interaction.followup.send(result)
+
+
+@bot.tree.command(
+    name="lesson_review",
+    description="Get LOA + PD oriented feedback on your lesson plan."
+)
+@app_commands.describe(
+    lesson_plan="Paste your lesson plan or main stages."
+)
+async def lesson_review_slash(
+    interaction: discord.Interaction,
+    lesson_plan: str,
+):
+    if not config.get("lessons_enabled", True):
+        return await interaction.response.send_message("Lesson tools are disabled.", ephemeral=True)
+
+    await interaction.response.defer(thinking=True)
+
+    prompt = (
+        "You are reviewing a language lesson plan from a teacher at CEIL.\n"
+        "Focus on **learning-oriented assessment** and teacher professional growth.\n\n"
+        f"Lesson plan:\n{lesson_plan}\n\n"
+        "Provide:\n"
+        "1) Short overview: what the lesson seems to aim at.\n"
+        "2) Where assessment is happening (or could happen) inside the lesson.\n"
+        "3) Suggestions to turn 'testing moments' into 'learning-oriented' moments.\n"
+        "4) Advice for the teacher on how to observe, collect evidence, and adjust future lessons.\n"
+        "5) 2–3 PD suggestions (small things the teacher can track about their own practice)."
+    )
+
+    result = await teacher_llm(prompt)
+    await interaction.followup.send(result)
 
 ###############################################################
 # 18. COORDINATION & PROGRESSION SUPPORT
@@ -2413,45 +2634,10 @@ for cmd_name in ["hangman", "guess", "blackjack", "hit", "stand", "trivia", "ans
 ###############################################
 
 ###############################################################
-# 32. BLACKJACK FULL ENGINE
-###############################################################
-
-blackjack_sessions: dict[int, dict] = {}  # user_id -> {player, dealer}
-
-
-def bj_draw_card():
-    ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
-    suits = ["♠", "♥", "♦", "♣"]
-    return random.choice(ranks), random.choice(suits)
-
-
-def bj_hand_value(cards):
-    total = 0
-    aces = 0
-    for r, _ in cards:
-        if r in ["J", "Q", "K"]:
-            total += 10
-        elif r == "A":
-            total += 11
-            aces += 1
-        else:
-            total += int(r)
-    while total > 21 and aces > 0:
-        total -= 10
-        aces -= 1
-    return total
-
-
-def bj_format(cards):
-    return " ".join(f"{r}{s}" for r, s in cards)
-
-
-###############################################################
-# 32. BLACKJACK ENGINE (with coins)
+# 32. BLACKJACK FULL ENGINE (WITH COINS)
 ###############################################################
 
 blackjack_sessions: dict[int, dict] = {}  # user_id -> {player, dealer, bet}
-DEFAULT_BJ_BET = 10
 
 
 def bj_draw_card():
@@ -2482,43 +2668,38 @@ def bj_format(cards):
 
 
 @bot.command(name="blackjack")
-async def blackjack_cmd(ctx: commands.Context, bet: int | None = None):
+async def blackjack_cmd(ctx: commands.Context, bet: int = 10):
     """
     Start a blackjack game using coins.
     Usage: !blackjack [bet]
-    If bet is omitted, uses DEFAULT_BJ_BET.
     """
     if not config.get("fun_enabled", True):
         return await ctx.reply("🎮 Fun commands are disabled.", mention_author=False)
 
-    uid = ctx.author.id
-    if uid in blackjack_sessions:
-        return await ctx.reply(
-            "You already have an active blackjack game. Finish it first.",
-            mention_author=False,
-        )
+    if bet <= 0:
+        return await ctx.reply("Bet must be a positive amount.", mention_author=False)
 
-    if bet is None or bet <= 0:
-        bet = DEFAULT_BJ_BET
-
-    balance = get_coins(uid)
+    balance = get_coins(ctx.author.id)
     if balance < bet:
         return await ctx.reply(
-            f"💰 You don't have enough coins. Bet: **{bet}**, balance: **{balance}**.",
+            f"❌ You don't have enough coins. Balance: **{balance}**.",
             mention_author=False,
         )
+
+    # Deduct bet when game starts
+    add_coins(ctx.author.id, -bet)
+
+    uid = ctx.author.id
 
     player = [bj_draw_card(), bj_draw_card()]
     dealer = [bj_draw_card(), bj_draw_card()]
     blackjack_sessions[uid] = {"player": player, "dealer": dealer, "bet": bet}
 
     msg = (
-        f"🃏 **Blackjack** 🃏\n"
-        f"Bet: **{bet}** coins | Balance: **{balance}**\n\n"
+        f"🃏 **Blackjack** — Bet: **{bet} coins**\n\n"
         f"**Your hand:** {bj_format(player)} (value: {bj_hand_value(player)})\n"
         f"**Dealer shows:** {bj_format([dealer[0]])}\n\n"
-        "Use `!hit` to draw or `!stand` to hold.\n"
-        "(*Coins are adjusted at the end of the round.*)"
+        "Use `!hit` to draw or `!stand` to hold."
     )
 
     await ctx.reply(msg, mention_author=False)
@@ -2528,26 +2709,18 @@ async def blackjack_cmd(ctx: commands.Context, bet: int | None = None):
 async def blackjack_hit_cmd(ctx: commands.Context):
     uid = ctx.author.id
     if uid not in blackjack_sessions:
-        return await ctx.reply(
-            "No active blackjack game. Start one with `!blackjack`.",
-            mention_author=False,
-        )
+        return await ctx.reply("No active blackjack game. Start one with `!blackjack`.", mention_author=False)
 
     game = blackjack_sessions[uid]
     game["player"].append(bj_draw_card())
     val = bj_hand_value(game["player"])
+    bet = game["bet"]
 
     if val > 21:
-        bet = game["bet"]
-        # Lose bet
-        add_coins(uid, -bet)
-        balance = get_coins(uid)
-
         msg = (
             f"💥 **Bust!**\n"
             f"Your hand: {bj_format(game['player'])} ({val})\n"
-            f"You lose **{bet}** coins.\n"
-            f"New balance: **{balance}** coins."
+            f"You lost **{bet} coins**."
         )
         blackjack_sessions.pop(uid, None)
     else:
@@ -2563,10 +2736,7 @@ async def blackjack_hit_cmd(ctx: commands.Context):
 async def blackjack_stand_cmd(ctx: commands.Context):
     uid = ctx.author.id
     if uid not in blackjack_sessions:
-        return await ctx.reply(
-            "No active blackjack game. Start with `!blackjack`.",
-            mention_author=False,
-        )
+        return await ctx.reply("No active blackjack game. Start with `!blackjack`.", mention_author=False)
 
     game = blackjack_sessions[uid]
     dealer = game["dealer"]
@@ -2584,39 +2754,21 @@ async def blackjack_stand_cmd(ctx: commands.Context):
         f"**Dealer hand:** {bj_format(dealer)} ({dv})\n\n"
     )
 
-    delta = 0
     if dv > 21 or pv > dv:
-        delta = bet
-        msg += f"🎉 **You win!** (+{bet} coins)\n"
-        add_xp(ctx.author.id, 20)
-    elif pv == dv:
-        delta = 0
-        msg += "➖ **Push (draw).** No coins lost.\n"
-    else:
-        delta = -bet
-        msg += f"❌ **Dealer wins.** (-{bet} coins)\n"
-
-    if delta != 0:
-        new_balance = add_coins(uid, delta)
-    else:
-        new_balance = get_coins(uid)
-
-    msg += f"💰 New balance: **{new_balance}** coins."
-
-    blackjack_sessions.pop(uid, None)
-    await ctx.reply(msg, mention_author=False)
-
-
-    if dv > 21 or pv > dv:
-        msg += "🎉 **You win!**"
+        win_amount = bet * 2  # net profit = +bet (since bet already deducted)
+        add_coins(ctx.author.id, win_amount)
         add_xp(ctx.author.id, 20)  # XP BONUS
+        msg += f"🎉 **You win {win_amount} coins!** (+20 XP)"
     elif pv == dv:
-        msg += "➖ **Push (draw).**"
+        # Refund bet
+        add_coins(ctx.author.id, bet)
+        msg += "➖ **Push (draw).** Your bet was refunded."
     else:
-        msg += "❌ **Dealer wins.**"
+        msg += f"❌ **Dealer wins.** You lost **{bet} coins**."
 
     blackjack_sessions.pop(uid, None)
     await ctx.reply(msg, mention_author=False)
+
 ###############################################################
 # 33. HANGMAN ENGINE
 ###############################################################
@@ -3202,6 +3354,82 @@ async def admin_dashboard_slash(interaction: discord.Interaction):
         view=view,
         ephemeral=True,
     )
+    ###############################################################
+# COINS SLASH COMMANDS
+###############################################################
+
+@bot.tree.command(
+    name="coins",
+    description="Show your coin balance or another member's."
+)
+@app_commands.describe(member="Member to check (optional).")
+async def coins_slash(interaction: discord.Interaction, member: discord.Member | None = None):
+    user = member or interaction.user
+    balance = get_coins(user.id)
+    own = (user.id == interaction.user.id)
+
+    if own:
+        text = f"💰 You have **{balance} coins**."
+    else:
+        text = f"💰 {user.mention} has **{balance} coins**."
+
+    await interaction.response.send_message(text, ephemeral=True)
+
+
+@bot.tree.command(
+    name="coins_daily",
+    description="Claim your daily coin reward."
+)
+async def coins_daily_slash(interaction: discord.Interaction):
+    DAILY_AMOUNT = 50
+
+    if not can_claim_daily(interaction.user.id):
+        return await interaction.response.send_message(
+            "⏳ You already claimed your daily reward today.",
+            ephemeral=True,
+        )
+
+    new_balance = mark_daily_claim(interaction.user.id, DAILY_AMOUNT)
+    await interaction.response.send_message(
+        f"✅ You claimed **{DAILY_AMOUNT} coins**! New balance: **{new_balance}**.",
+        ephemeral=True,
+    )
+
+
+@bot.tree.command(
+    name="coins_top",
+    description="Show the top 10 users by coins."
+)
+async def coins_top_slash(interaction: discord.Interaction):
+    if not coins_data:
+        return await interaction.response.send_message(
+            "No coin data yet.",
+            ephemeral=True,
+        )
+
+    # Sort by coins desc
+    sorted_users = sorted(
+        coins_data.items(),
+        key=lambda kv: int(kv[1].get("coins", 0)),
+        reverse=True,
+    )[:10]
+
+    lines = []
+    for idx, (uid, rec) in enumerate(sorted_users, start=1):
+        member = interaction.guild.get_member(int(uid))
+        name = member.display_name if member else f"User {uid}"
+        coins_val = rec.get("coins", 0)
+        lines.append(f"**#{idx}** — {name}: **{coins_val} coins**")
+
+    desc = "\n".join(lines) if lines else "No data."
+    embed = make_embed(
+        title="🏆 Coin Leaderboard (Top 10)",
+        description=desc,
+        color=discord.Color.gold(),
+    )
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
 def _recalculate_level_for_xp(total_xp: int) -> int:
     """
     Recalculate level based on XP using the same logic as add_xp.
@@ -3335,6 +3563,88 @@ async def admin_xp_show_slash(
         f"ℹ XP profile for {member.mention}:\n"
         f"• XP: **{xp}**\n"
         f"• Level: **{lvl}**",
+        ephemeral=True,
+    )
+###############################################################
+# ADMIN COINS MANAGEMENT
+###############################################################
+
+@admin_group.command(
+    name="coins_set",
+    description="(Admin) Set a member's coins to an exact value."
+)
+@app_commands.describe(
+    member="Target member",
+    amount="New coin balance"
+)
+async def admin_coins_set_slash(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    amount: int,
+):
+    if not isinstance(interaction.user, discord.Member) or not is_staff(interaction.user):
+        return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+    if amount < 0:
+        amount = 0
+
+    set_coins(member.id, amount)
+    await interaction.response.send_message(
+        f"✅ Set {member.mention}'s coins to **{amount}**.",
+        ephemeral=True,
+    )
+
+
+@admin_group.command(
+    name="coins_add",
+    description="(Admin) Add coins to a member."
+)
+@app_commands.describe(
+    member="Target member",
+    amount="Amount to add (use negative to subtract)"
+)
+async def admin_coins_add_slash(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    amount: int,
+):
+    if not isinstance(interaction.user, discord.Member) or not is_staff(interaction.user):
+        return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+    new_balance = add_coins(member.id, amount)
+    sign = "+" if amount >= 0 else ""
+    await interaction.response.send_message(
+        f"✅ Updated {member.mention}'s coins: {sign}{amount} → **{new_balance}** total.",
+        ephemeral=True,
+    )
+
+
+@admin_group.command(
+    name="coins_remove",
+    description="(Admin) Remove coins from a member."
+)
+@app_commands.describe(
+    member="Target member",
+    amount="Amount to remove"
+)
+async def admin_coins_remove_slash(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    amount: int,
+):
+    if not isinstance(interaction.user, discord.Member) or not is_staff(interaction.user):
+        return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+    if amount < 0:
+        amount = -amount
+
+    new_balance = add_coins(member.id, -amount)
+    if new_balance < 0:
+        set_coins(member.id, 0)
+        new_balance = 0
+
+    await interaction.response.send_message(
+        f"✅ Removed **{amount}** coins from {member.mention}. New balance: **{new_balance}**.",
         ephemeral=True,
     )
 
@@ -4985,6 +5295,11 @@ async def on_ready():
         load_teacher_progress()
     except NameError:
         pass
+    # Load coins data
+    try:
+        load_coins()
+    except Exception as e:
+        print("⚠ Failed to load coins data:", e)
 
     # Attach /admin group to the command tree (if not already)
     try:
@@ -5184,13 +5499,14 @@ if __name__ == "__main__":
     load_config()
     load_xp()
     try:
-        load_coins()
-    except NameError:
-        pass
-    try:
         load_teacher_progress()
     except NameError:
         pass
+
+    try:
+        load_coins()
+    except Exception as e:
+        print("⚠ Failed to load coins data:", e)
 
     print("🚀 Starting CEIL Full-Max Bot...")
     bot.run(DISCORD_TOKEN)
