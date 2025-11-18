@@ -22,27 +22,27 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from openai import OpenAI
+# =============== GOOGLE CENTER BASE CONFIG ==================
+
 import base64
-import json
-from google.oauth2.service_account import Credentials
-
-# ===== GOOGLE / YOUTUBE CONFIG VIA ENV VARS =====
-GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID", "")
-GOOGLE_APPLICATION_CREDENTIALS_BASE64 = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64", "")
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
-
-
-# ===== Load Google Service Account Credentials =====
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
+GOOGLE_APPLICATION_CREDENTIALS_BASE64 = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64", "")
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+
+# Google runtime flags
+GOOGLE_READY = False
 google_credentials = None
 google_drive = None
 google_calendar = None
+google_youtube = None
 
-if GOOGLE_APPLICATION_CREDENTIALS_BASE64:
-    try:
-        decoded = base64.b64decode(GOOGLE_APPLICATION_CREDENTIALS_BASE64)
+# =============== LOAD GOOGLE SERVICES =======================
+
+try:
+    if GOOGLE_APPLICATION_CREDENTIALS_BASE64:
+        decoded = base64.b64decode(GOOGLE_APPLICATION_CREDENTIALS_BASE64).decode("utf-8")
         creds_dict = json.loads(decoded)
 
         google_credentials = service_account.Credentials.from_service_account_info(
@@ -50,16 +50,71 @@ if GOOGLE_APPLICATION_CREDENTIALS_BASE64:
             scopes=[
                 "https://www.googleapis.com/auth/drive",
                 "https://www.googleapis.com/auth/calendar",
-                "https://www.googleapis.com/auth/youtube"
+                "https://www.googleapis.com/auth/youtube.force-ssl",
+                "https://www.googleapis.com/auth/youtube.upload"
             ]
         )
 
+        # Initialize clients
         google_drive = build("drive", "v3", credentials=google_credentials)
         google_calendar = build("calendar", "v3", credentials=google_credentials)
+        google_youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 
+        GOOGLE_READY = True
         print("✅ Google services initialized.")
-    except Exception as e:
-        print("❌ Failed to load Google credentials:", e)
+
+    else:
+        print("⚠ GOOGLE_APPLICATION_CREDENTIALS_BASE64 not set — Google Center disabled.")
+
+except Exception as e:
+    print(f"❌ Google initialization failed: {e}")
+# =============== GOOGLE CENTER BASE CONFIG ==================
+
+import base64
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+
+GOOGLE_APPLICATION_CREDENTIALS_BASE64 = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64", "")
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+
+# Google runtime flags
+GOOGLE_READY = False
+google_credentials = None
+google_drive = None
+google_calendar = None
+google_youtube = None
+
+# =============== LOAD GOOGLE SERVICES =======================
+
+try:
+    if GOOGLE_APPLICATION_CREDENTIALS_BASE64:
+        decoded = base64.b64decode(GOOGLE_APPLICATION_CREDENTIALS_BASE64).decode("utf-8")
+        creds_dict = json.loads(decoded)
+
+        google_credentials = service_account.Credentials.from_service_account_info(
+            creds_dict,
+            scopes=[
+                "https://www.googleapis.com/auth/drive",
+                "https://www.googleapis.com/auth/calendar",
+                "https://www.googleapis.com/auth/youtube.force-ssl",
+                "https://www.googleapis.com/auth/youtube.upload"
+            ]
+        )
+
+        # Initialize clients
+        google_drive = build("drive", "v3", credentials=google_credentials)
+        google_calendar = build("calendar", "v3", credentials=google_credentials)
+        google_youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
+
+        GOOGLE_READY = True
+        print("✅ Google services initialized.")
+
+    else:
+        print("⚠ GOOGLE_APPLICATION_CREDENTIALS_BASE64 not set — Google Center disabled.")
+
+except Exception as e:
+    print(f"❌ Google initialization failed: {e}")
+    
 else:
     print("⚠ No GOOGLE_APPLICATION_CREDENTIALS_BASE64 provided.")
     
