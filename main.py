@@ -22,6 +22,9 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from openai import OpenAI
+from discord.ui import View, Button, Select
+from discord import SelectOption
+
 # =============== GOOGLE CENTER BASE CONFIG ==================
 
 import base64
@@ -3325,6 +3328,500 @@ async def progress_report_slash(interaction: discord.Interaction):
         ),
         ephemeral=True,
     )
+###############################################
+# CEIL BOT — ADMIN DASHBOARD V3
+# /dashboard — main control center
+###############################################
+
+# Small guard so this file can reload without redefining many times
+DASHBOARD_V3_ENABLED = True
+
+# --------- Helper: safe google status ----------
+def get_google_status_summary():
+    # Avoid NameError if GOOGLE_READY or GOOGLE_SERVICE_ACCOUNT_JSON missing
+    google_ready = bool(globals().get("GOOGLE_READY", False))
+    svc_json_present = bool(globals().get("GOOGLE_SERVICE_ACCOUNT_JSON", None))
+    yt_key = os.getenv("YOUTUBE_API_KEY", "")
+    yt_ok = bool(yt_key and yt_key.strip())
+
+    lines = []
+    lines.append(f"Google service account JSON: {'✅' if svc_json_present else '❌'}")
+    lines.append(f"Core Google services initialized: {'✅' if google_ready else '❌'}")
+    lines.append(f"YouTube API key: {'✅' if yt_ok else '❌'}")
+
+    project_id = os.getenv("GOOGLE_PROJECT_ID", "")
+    if project_id:
+        lines.append(f"Project ID: `{project_id}`")
+    else:
+        lines.append("Project ID: ❌ (GOOGLE_PROJECT_ID not set)")
+
+    return "\n".join(lines)
+
+
+# --------- Helper: permission check for slash dashboard ----------
+async def ensure_admin_interaction(interaction: discord.Interaction) -> bool:
+    if not isinstance(interaction.user, discord.Member) or not is_staff(interaction.user):
+        try:
+            await interaction.response.send_message("❌ You are not allowed to use this dashboard.", ephemeral=True)
+        except discord.InteractionResponded:
+            await interaction.followup.send("❌ You are not allowed to use this dashboard.", ephemeral=True)
+        return False
+    return True
+
+
+# --------- Generic embed factory for the dashboard ----------
+def dashboard_embed(title: str, description: str, color=discord.Color.blurple()):
+    emb = discord.Embed(title=title, description=description, color=color)
+    emb.set_footer(text="CEIL Full-Max Admin Dashboard V3")
+    emb.timestamp = datetime.utcnow()
+    return emb
+
+
+###############################################
+# DASHBOARD VIEWS & COMPONENTS
+###############################################
+
+class DashboardMainView(View):
+    """
+    Main view: section selector + quick buttons.
+    """
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(DashboardSectionSelect())
+        # Optional quick buttons
+        self.add_item(RefreshButton())
+        self.add_item(CloseDashboardButton())
+
+
+class DashboardSectionSelect(Select):
+    def __init__(self):
+        options = [
+            SelectOption(label="General Settings", value="general", description="Feature toggles, core config"),
+            SelectOption(label="AI Engine", value="ai", description="AI modes, auto-reply, languages"),
+            SelectOption(label="Teacher Suite", value="teacher", description="Lesson tools, progression, reports"),
+            SelectOption(label="Moderation", value="mod", description="Auto-moderation, spam, logging"),
+            SelectOption(label="Economy & Games", value="games", description="XP, coins, fun engine"),
+            SelectOption(label="Google Center", value="google", description="Drive, Calendar, YouTube status"),
+        ]
+        super().__init__(
+            placeholder="Select a dashboard section…",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await ensure_admin_interaction(interaction):
+            return
+
+        section = self.values[0]
+
+        if section == "general":
+            view = GeneralSettingsView()
+            desc = (
+                "Toggle major systems on/off and see core configuration.\n\n"
+                f"- AI Engine: {'✅' if config.get('ai_enabled', True) else '❌'}\n"
+                f"- Moderation: {'✅' if config.get('moderation_enabled', True) else '❌'}\n"
+                f"- XP System: {'✅' if config.get('xp_enabled', True) else '❌'}\n"
+                f"- Fun / Games: {'✅' if config.get('fun_enabled', True) else '❌'}\n"
+                f"- Lessons / Teacher Suite: {'✅' if config.get('lessons_enabled', True) else '❌'}\n"
+                f"- Research Suite: {'✅' if config.get('research_enabled', True) else '❌'}\n"
+                f"- Vision / Images: {'✅' if config.get('images_enabled', True) else '❌'}\n"
+                f"- Logging: {'✅' if config.get('logging_enabled', True) else '❌'}\n"
+            )
+            embed = dashboard_embed("⚙️ General Settings", desc, color=discord.Color.gold())
+
+        elif section == "ai":
+            view = AiSettingsView()
+            mode = config.get("ai_default_mode", "ceil")
+            desc = (
+                f"Configure the AI engine, default mode and behaviour.\n\n"
+                f"- AI enabled: {'✅' if config.get('ai_enabled', True) else '❌'}\n"
+                f"- Default mode: `{mode}`\n"
+                "Available modes: `ceil`, `education`, `admin`, `general`, `fun`, `topic:<something>`\n"
+            )
+            embed = dashboard_embed("🤖 AI Engine Settings", desc, color=discord.Color.blurple())
+
+        elif section == "teacher":
+            view = TeacherSettingsView()
+            desc = (
+                "Control lesson tools, worksheet/quiz generation and progression tracking.\n\n"
+                f"- Lesson tools: {'✅' if config.get('lessons_enabled', True) else '❌'}\n"
+                f"- Research tools: {'✅' if config.get('research_enabled', True) else '❌'}\n"
+                "Use the buttons below to toggle suites and get progression overview."
+            )
+            embed = dashboard_embed("🧑‍🏫 Teacher & Research Suite", desc, color=discord.Color.green())
+
+        elif section == "mod":
+            view = ModerationSettingsView()
+            desc = (
+                "Configure moderation: spam, links, slowmode and logging.\n\n"
+                f"- Moderation: {'✅' if config.get('moderation_enabled', True) else '❌'}\n"
+                f"- Logging: {'✅' if config.get('logging_enabled', True) else '❌'}\n"
+            )
+            embed = dashboard_embed("🛡️ Moderation & Safety", desc, color=discord.Color.red())
+
+        elif section == "games":
+            view = GamesSettingsView()
+            desc = (
+                "Configure XP and fun engine.\n\n"
+                f"- XP: {'✅' if config.get('xp_enabled', True) else '❌'}\n"
+                f"- Fun / Games: {'✅' if config.get('fun_enabled', True) else '❌'}\n"
+                "Blackjack, Hangman, Trivia and more use this engine.\n"
+            )
+            embed = dashboard_embed("🎮 Economy & Games", desc, color=discord.Color.purple())
+
+        elif section == "google":
+            view = GoogleSettingsView()
+            desc = "Status of Google integrations:\n\n" + get_google_status_summary()
+            embed = dashboard_embed("🟩 Google Center", desc, color=discord.Color.green())
+
+        else:
+            # fallback to home
+            view = DashboardMainView()
+            embed = dashboard_embed(
+                "🛠️ CEIL ADMIN DASHBOARD V3",
+                "Unexpected section, returning to main menu.",
+            )
+
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class RefreshButton(Button):
+    def __init__(self):
+        super().__init__(style=discord.ButtonStyle.secondary, label="Refresh", emoji="🔁", row=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await ensure_admin_interaction(interaction):
+            return
+
+        desc = (
+            "Select a section from the dropdown to manage the bot.\n\n"
+            f"- AI: {'✅' if config.get('ai_enabled', True) else '❌'}\n"
+            f"- Moderation: {'✅' if config.get('moderation_enabled', True) else '❌'}\n"
+            f"- XP: {'✅' if config.get('xp_enabled', True) else '❌'}\n"
+            f"- Fun: {'✅' if config.get('fun_enabled', True) else '❌'}\n"
+            f"- Lessons: {'✅' if config.get('lessons_enabled', True) else '❌'}\n"
+            f"- Research: {'✅' if config.get('research_enabled', True) else '❌'}\n"
+            f"- Images/Vision: {'✅' if config.get('images_enabled', True) else '❌'}\n"
+        )
+        embed = dashboard_embed("🛠️ CEIL ADMIN DASHBOARD V3", desc)
+        await interaction.response.edit_message(embed=embed, view=DashboardMainView())
+
+
+class CloseDashboardButton(Button):
+    def __init__(self):
+        super().__init__(style=discord.ButtonStyle.danger, label="Close", emoji="🗙", row=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await ensure_admin_interaction(interaction):
+            return
+        await interaction.response.edit_message(content="Dashboard closed.", embed=None, view=None)
+
+
+###############################################
+# SECTION: GENERAL SETTINGS
+###############################################
+
+class GeneralSettingsView(View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(ToggleFeatureButton("AI", "ai_enabled", row=0))
+        self.add_item(ToggleFeatureButton("Moderation", "moderation_enabled", row=0))
+        self.add_item(ToggleFeatureButton("XP", "xp_enabled", row=0))
+        self.add_item(ToggleFeatureButton("Fun/Games", "fun_enabled", row=1))
+        self.add_item(ToggleFeatureButton("Lessons", "lessons_enabled", row=1))
+        self.add_item(ToggleFeatureButton("Research", "research_enabled", row=1))
+        self.add_item(ToggleFeatureButton("Vision/Images", "images_enabled", row=2))
+        self.add_item(ToggleFeatureButton("Logging", "logging_enabled", row=2))
+        self.add_item(BackToMainButton(row=3))
+
+
+class ToggleFeatureButton(Button):
+    def __init__(self, label_name: str, config_key: str, row: int = 0):
+        emoji = "✅" if config.get(config_key, True) else "❌"
+        super().__init__(
+            style=discord.ButtonStyle.primary,
+            label=f"{label_name}: {emoji}",
+            row=row,
+        )
+        self.config_key = config_key
+        self.label_name = label_name
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await ensure_admin_interaction(interaction):
+            return
+
+        current = config.get(self.config_key, True)
+        new_val = not current
+        config[self.config_key] = new_val
+        save_config()
+
+        # Update button label
+        self.label = f"{self.label_name}: {'✅' if new_val else '❌'}"
+
+        # Rebuild description
+        desc = (
+            "Toggle major systems on/off and see core configuration.\n\n"
+            f"- AI Engine: {'✅' if config.get('ai_enabled', True) else '❌'}\n"
+            f"- Moderation: {'✅' if config.get('moderation_enabled', True) else '❌'}\n"
+            f"- XP System: {'✅' if config.get('xp_enabled', True) else '❌'}\n"
+            f"- Fun / Games: {'✅' if config.get('fun_enabled', True) else '❌'}\n"
+            f"- Lessons / Teacher Suite: {'✅' if config.get('lessons_enabled', True) else '❌'}\n"
+            f"- Research Suite: {'✅' if config.get('research_enabled', True) else '❌'}\n"
+            f"- Vision / Images: {'✅' if config.get('images_enabled', True) else '❌'}\n"
+            f"- Logging: {'✅' if config.get('logging_enabled', True) else '❌'}\n"
+        )
+        embed = dashboard_embed("⚙️ General Settings", desc, color=discord.Color.gold())
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+class BackToMainButton(Button):
+    def __init__(self, row: int = 2):
+        super().__init__(style=discord.ButtonStyle.secondary, label="⬅ Back to main", row=row)
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await ensure_admin_interaction(interaction):
+            return
+
+        desc = (
+            "Select a section from the dropdown to manage the bot.\n\n"
+            f"- AI: {'✅' if config.get('ai_enabled', True) else '❌'}\n"
+            f"- Moderation: {'✅' if config.get('moderation_enabled', True) else '❌'}\n"
+            f"- XP: {'✅' if config.get('xp_enabled', True) else '❌'}\n"
+            f"- Fun: {'✅' if config.get('fun_enabled', True) else '❌'}\n"
+        )
+        embed = dashboard_embed("🛠️ CEIL ADMIN DASHBOARD V3", desc)
+        await interaction.response.edit_message(embed=embed, view=DashboardMainView())
+
+
+###############################################
+# SECTION: AI SETTINGS
+###############################################
+
+class AiSettingsView(View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(ToggleFeatureButton("AI", "ai_enabled", row=0))
+        self.add_item(SetAiModeSelect())
+        self.add_item(BackToMainButton(row=2))
+
+
+class SetAiModeSelect(Select):
+    def __init__(self):
+        current = config.get("ai_default_mode", "ceil")
+        options = [
+            SelectOption(label="CEIL Mode", value="ceil", description="Coordination & CEIL-focused"),
+            SelectOption(label="Education Mode", value="education", description="Teacher / pedagogy focus"),
+            SelectOption(label="Admin Mode", value="admin", description="Formal documents & emails"),
+            SelectOption(label="General Mode", value="general", description="General safe conversation"),
+            SelectOption(label="Fun Mode", value="fun", description="Light & playful (still safe)"),
+        ]
+        super().__init__(
+            placeholder=f"Default AI mode (current: {current})",
+            options=options,
+            min_values=1,
+            max_values=1,
+            row=1
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await ensure_admin_interaction(interaction):
+            return
+
+        mode = self.values[0]
+        config["ai_default_mode"] = mode
+        save_config()
+
+        desc = (
+            f"Configure the AI engine, default mode and behaviour.\n\n"
+            f"- AI enabled: {'✅' if config.get('ai_enabled', True) else '❌'}\n"
+            f"- Default mode: `{mode}`\n"
+            "Available modes: `ceil`, `education`, `admin`, `general`, `fun`, `topic:<something>`\n"
+        )
+        embed = dashboard_embed("🤖 AI Engine Settings", desc, color=discord.Color.blurple())
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+###############################################
+# SECTION: TEACHER & RESEARCH
+###############################################
+
+class TeacherSettingsView(View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(ToggleFeatureButton("Lessons", "lessons_enabled", row=0))
+        self.add_item(ToggleFeatureButton("Research", "research_enabled", row=0))
+        self.add_item(TeacherProgressOverviewButton(row=1))
+        self.add_item(BackToMainButton(row=2))
+
+
+class TeacherProgressOverviewButton(Button):
+    def __init__(self, row: int = 1):
+        super().__init__(
+            style=discord.ButtonStyle.primary,
+            label="Show progression snapshot",
+            emoji="📊",
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await ensure_admin_interaction(interaction):
+            return
+
+        # Try to reuse teacher_progress from Chunk 6
+        global teacher_progress
+        try:
+            load_teacher_progress()
+        except NameError:
+            # teacher_progress system not present
+            text = "Teacher progression tracking file not found in this build."
+            embed = dashboard_embed("📊 Progression Snapshot", text, color=discord.Color.orange())
+            await interaction.response.edit_message(embed=embed, view=self.view)
+            return
+
+        gid = str(interaction.guild.id)
+        data = teacher_progress.get(gid, {})
+        if not data:
+            text = "No teacher progression data recorded yet."
+        else:
+            lines = []
+            for uid, rec in data.items():
+                name = rec.get("name", f"User {uid}")
+                groups = ", ".join(rec.get("groups", [])) or "—"
+                levels = ", ".join(rec.get("levels", [])) or "—"
+                updates = rec.get("progress_updates", [])
+                last = updates[-1]["summary"] if updates else "No updates yet."
+                lines.append(f"**{name}** — Groups: {groups} | Levels: {levels}\nLast: {last[:160]}…")
+            text = "\n\n".join(lines)
+            if len(text) > 1900:
+                text = text[:1900] + "\n\n[Truncated…]"
+
+        embed = dashboard_embed("📊 Progression Snapshot", text, color=discord.Color.green())
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+###############################################
+# SECTION: MODERATION
+###############################################
+
+class ModerationSettingsView(View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(ToggleFeatureButton("Moderation", "moderation_enabled", row=0))
+        self.add_item(ToggleFeatureButton("Logging", "logging_enabled", row=0))
+        self.add_item(BackToMainButton(row=1))
+
+
+###############################################
+# SECTION: GAMES & ECONOMY
+###############################################
+
+class GamesSettingsView(View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(ToggleFeatureButton("XP", "xp_enabled", row=0))
+        self.add_item(ToggleFeatureButton("Fun/Games", "fun_enabled", row=0))
+        self.add_item(ViewUserXpButton(row=1))
+        self.add_item(BackToMainButton(row=2))
+
+
+class ViewUserXpButton(Button):
+    def __init__(self, row: int = 1):
+        super().__init__(style=discord.ButtonStyle.secondary, label="XP summary (top 5)", emoji="🏆", row=row)
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await ensure_admin_interaction(interaction):
+            return
+
+        # Build small leaderboard from xp_data
+        if not xp_data:
+            text = "No XP data recorded yet."
+        else:
+            # convert to sortable list
+            items = []
+            for uid_str, info in xp_data.items():
+                try:
+                    uid = int(uid_str)
+                except ValueError:
+                    continue
+                xp = info.get("xp", 0)
+                level = info.get("level", 1)
+                member = interaction.guild.get_member(uid)
+                name = member.display_name if member else f"User {uid}"
+                items.append((xp, level, name))
+            items.sort(reverse=True, key=lambda t: t[0])
+            top = items[:5]
+            if not top:
+                text = "No XP entries found."
+            else:
+                lines = []
+                for rank, (xp, lvl, name) in enumerate(top, start=1):
+                    lines.append(f"{rank}. **{name}** — Level {lvl}, XP {xp}")
+                text = "\n".join(lines)
+
+        embed = dashboard_embed("🏆 XP Leaderboard (Top 5)", text, color=discord.Color.purple())
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+###############################################
+# SECTION: GOOGLE CENTER
+###############################################
+
+class GoogleSettingsView(View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(TestGoogleStatusButton(row=0))
+        self.add_item(BackToMainButton(row=1))
+
+    async def refresh_embed(self, interaction: discord.Interaction):
+        desc = "Status of Google integrations:\n\n" + get_google_status_summary()
+        embed = dashboard_embed("🟩 Google Center", desc, color=discord.Color.green())
+        await interaction.response.edit_message(embed=embed, view=self)
+
+
+class TestGoogleStatusButton(Button):
+    def __init__(self, row: int = 0):
+        super().__init__(
+            style=discord.ButtonStyle.primary,
+            label="Recheck Google status",
+            emoji="🔍",
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await ensure_admin_interaction(interaction):
+            return
+
+        # Just rebuild the embed with current env status
+        desc = "Status of Google integrations:\n\n" + get_google_status_summary()
+        embed = dashboard_embed("🟩 Google Center", desc, color=discord.Color.green())
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+###############################################
+# /dashboard SLASH COMMAND
+###############################################
+
+@bot.tree.command(name="dashboard", description="Open the CEIL Admin Dashboard V3")
+async def dashboard_slash(interaction: discord.Interaction):
+    # Protect with staff permissions
+    if not await ensure_admin_interaction(interaction):
+        return
+
+    desc = (
+        "Welcome to the **CEIL Admin Dashboard V3**.\n\n"
+        "Use the dropdown below to manage:\n"
+        "- General bot systems\n"
+        "- AI Engine modes\n"
+        "- Teacher & Research suite\n"
+        "- Moderation & logging\n"
+        "- Economy & games\n"
+        "- Google Center\n"
+    )
+    embed = dashboard_embed("🛠️ CEIL ADMIN DASHBOARD V3", desc)
+    view = DashboardMainView()
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 ###############################################################
