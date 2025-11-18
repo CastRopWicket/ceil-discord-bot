@@ -424,6 +424,50 @@ def build_admin_dashboard_embed() -> discord.Embed:
         ),
         inline=False,
     )
+    ###############################################################
+# COINS COMMANDS (Blackjack currency)
+###############################################################
+
+@bot.command(name="coins")
+async def coins_command(ctx: commands.Context, member: discord.Member | None = None):
+    """
+    Show your coins or another member's coins.
+    """
+    target = member or ctx.author
+    amount = get_coins(target.id)
+    if target.id == ctx.author.id:
+        msg = f"💰 You have **{amount}** coins."
+    else:
+        msg = f"💰 {target.mention} has **{amount}** coins."
+    await ctx.reply(msg, mention_author=False)
+
+
+@bot.command(name="setcoins")
+@staff_only()
+async def setcoins_command(ctx: commands.Context, member: discord.Member, amount: int):
+    """
+    Staff: set the exact number of coins for a user.
+    """
+    set_coins(member.id, amount)
+    await ctx.reply(
+        f"✅ Set {member.mention}'s coins to **{get_coins(member.id)}**.",
+        mention_author=False,
+    )
+
+
+@bot.command(name="addcoins")
+@staff_only()
+async def addcoins_command(ctx: commands.Context, member: discord.Member, delta: int):
+    """
+    Staff: add/remove coins from a user.
+    """
+    new_amount = add_coins(member.id, delta)
+    sign = "+" if delta >= 0 else ""
+    await ctx.reply(
+        f"✅ Updated {member.mention}'s coins: {sign}{delta}. New balance: **{new_amount}**.",
+        mention_author=False,
+    )
+
     return embed
     # Discord UI components (must be imported BEFORE the dashboard)
 from discord.ui import View, Button, Select, Modal, TextInput
@@ -644,6 +688,54 @@ def get_xp_profile(user_id: int):
     if uid not in xp_data:
         return (0, 1)
     return xp_data[uid]["xp"], xp_data[uid]["level"]
+    ###############################################################
+# COIN SYSTEM (for Blackjack + future fun features)
+###############################################################
+
+COINS_FILE = "coins_data.json"
+coins_data = {}   # { "user_id": coins_int }
+
+
+def load_coins():
+    """Load coins from disk."""
+    global coins_data
+    if os.path.exists(COINS_FILE):
+        try:
+            with open(COINS_FILE, "r", encoding="utf-8") as f:
+                coins_data = json.load(f)
+        except Exception:
+            coins_data = {}
+    else:
+        coins_data = {}
+
+
+def save_coins():
+    """Persist coins to disk."""
+    try:
+        with open(COINS_FILE, "w", encoding="utf-8") as f:
+            json.dump(coins_data, f, indent=2)
+    except Exception as e:
+        print(f"❌ ERROR writing {COINS_FILE}: {e}")
+
+
+def get_coins(user_id: int) -> int:
+    uid = str(user_id)
+    return int(coins_data.get(uid, 0))
+
+
+def set_coins(user_id: int, amount: int):
+    uid = str(user_id)
+    coins_data[uid] = max(0, int(amount))
+    save_coins()
+
+
+def add_coins(user_id: int, delta: int):
+    uid = str(user_id)
+    current = int(coins_data.get(uid, 0))
+    coins_data[uid] = max(0, current + int(delta))
+    save_coins()
+    return coins_data[uid]
+
 ###############################################################
 # GOOGLE CENTER (Drive + Calendar + YouTube)
 ###############################################################
@@ -2354,25 +2446,79 @@ def bj_format(cards):
     return " ".join(f"{r}{s}" for r, s in cards)
 
 
+###############################################################
+# 32. BLACKJACK ENGINE (with coins)
+###############################################################
+
+blackjack_sessions: dict[int, dict] = {}  # user_id -> {player, dealer, bet}
+DEFAULT_BJ_BET = 10
+
+
+def bj_draw_card():
+    ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+    suits = ["♠", "♥", "♦", "♣"]
+    return random.choice(ranks), random.choice(suits)
+
+
+def bj_hand_value(cards):
+    total = 0
+    aces = 0
+    for r, _ in cards:
+        if r in ["J", "Q", "K"]:
+            total += 10
+        elif r == "A":
+            total += 11
+            aces += 1
+        else:
+            total += int(r)
+    while total > 21 and aces > 0:
+        total -= 10
+        aces -= 1
+    return total
+
+
+def bj_format(cards):
+    return " ".join(f"{r}{s}" for r, s in cards)
+
+
 @bot.command(name="blackjack")
-async def blackjack_cmd(ctx: commands.Context):
+async def blackjack_cmd(ctx: commands.Context, bet: int | None = None):
     """
-    Start a blackjack game.
+    Start a blackjack game using coins.
+    Usage: !blackjack [bet]
+    If bet is omitted, uses DEFAULT_BJ_BET.
     """
     if not config.get("fun_enabled", True):
         return await ctx.reply("🎮 Fun commands are disabled.", mention_author=False)
 
     uid = ctx.author.id
+    if uid in blackjack_sessions:
+        return await ctx.reply(
+            "You already have an active blackjack game. Finish it first.",
+            mention_author=False,
+        )
+
+    if bet is None or bet <= 0:
+        bet = DEFAULT_BJ_BET
+
+    balance = get_coins(uid)
+    if balance < bet:
+        return await ctx.reply(
+            f"💰 You don't have enough coins. Bet: **{bet}**, balance: **{balance}**.",
+            mention_author=False,
+        )
 
     player = [bj_draw_card(), bj_draw_card()]
     dealer = [bj_draw_card(), bj_draw_card()]
-    blackjack_sessions[uid] = {"player": player, "dealer": dealer}
+    blackjack_sessions[uid] = {"player": player, "dealer": dealer, "bet": bet}
 
     msg = (
-        f"🃏 **Blackjack** 🃏\n\n"
+        f"🃏 **Blackjack** 🃏\n"
+        f"Bet: **{bet}** coins | Balance: **{balance}**\n\n"
         f"**Your hand:** {bj_format(player)} (value: {bj_hand_value(player)})\n"
         f"**Dealer shows:** {bj_format([dealer[0]])}\n\n"
-        "Type `!hit` to draw or `!stand` to hold."
+        "Use `!hit` to draw or `!stand` to hold.\n"
+        "(*Coins are adjusted at the end of the round.*)"
     )
 
     await ctx.reply(msg, mention_author=False)
@@ -2382,17 +2528,26 @@ async def blackjack_cmd(ctx: commands.Context):
 async def blackjack_hit_cmd(ctx: commands.Context):
     uid = ctx.author.id
     if uid not in blackjack_sessions:
-        return await ctx.reply("No active blackjack game. Start one with `!blackjack`.")
+        return await ctx.reply(
+            "No active blackjack game. Start one with `!blackjack`.",
+            mention_author=False,
+        )
 
     game = blackjack_sessions[uid]
     game["player"].append(bj_draw_card())
     val = bj_hand_value(game["player"])
 
     if val > 21:
+        bet = game["bet"]
+        # Lose bet
+        add_coins(uid, -bet)
+        balance = get_coins(uid)
+
         msg = (
             f"💥 **Bust!**\n"
             f"Your hand: {bj_format(game['player'])} ({val})\n"
-            "You lose."
+            f"You lose **{bet}** coins.\n"
+            f"New balance: **{balance}** coins."
         )
         blackjack_sessions.pop(uid, None)
     else:
@@ -2408,11 +2563,15 @@ async def blackjack_hit_cmd(ctx: commands.Context):
 async def blackjack_stand_cmd(ctx: commands.Context):
     uid = ctx.author.id
     if uid not in blackjack_sessions:
-        return await ctx.reply("No active blackjack game. Start with `!blackjack`.")
+        return await ctx.reply(
+            "No active blackjack game. Start with `!blackjack`.",
+            mention_author=False,
+        )
 
     game = blackjack_sessions[uid]
     dealer = game["dealer"]
     player = game["player"]
+    bet = game["bet"]
 
     while bj_hand_value(dealer) < 17:
         dealer.append(bj_draw_card())
@@ -2424,6 +2583,29 @@ async def blackjack_stand_cmd(ctx: commands.Context):
         f"**Your hand:** {bj_format(player)} ({pv})\n"
         f"**Dealer hand:** {bj_format(dealer)} ({dv})\n\n"
     )
+
+    delta = 0
+    if dv > 21 or pv > dv:
+        delta = bet
+        msg += f"🎉 **You win!** (+{bet} coins)\n"
+        add_xp(ctx.author.id, 20)
+    elif pv == dv:
+        delta = 0
+        msg += "➖ **Push (draw).** No coins lost.\n"
+    else:
+        delta = -bet
+        msg += f"❌ **Dealer wins.** (-{bet} coins)\n"
+
+    if delta != 0:
+        new_balance = add_coins(uid, delta)
+    else:
+        new_balance = get_coins(uid)
+
+    msg += f"💰 New balance: **{new_balance}** coins."
+
+    blackjack_sessions.pop(uid, None)
+    await ctx.reply(msg, mention_author=False)
+
 
     if dv > 21 or pv > dv:
         msg += "🎉 **You win!**"
@@ -2885,6 +3067,77 @@ async def admin_announce_slash(
     except Exception as e:
         await interaction.followup.send(f"❌ Failed to send announcement: {e}", ephemeral=True)
 
+@admin_group.command(
+    name="add_custom",
+    description="Create a custom AI command for this server."
+)
+@app_commands.describe(
+    name="Short name (no spaces).",
+    description="What this command does.",
+    prompt="Instruction for the AI (how it should behave)."
+)
+async def add_custom_command_slash(
+    interaction: discord.Interaction,
+    name: str,
+    description: str,
+    prompt: str,
+):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not is_staff(user):
+        return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+    name = name.strip().lower()
+    if " " in name or len(name) < 2:
+        return await interaction.response.send_message(
+            "Use a short name without spaces (e.g. `essay_check`).",
+            ephemeral=True,
+        )
+
+    load_custom_commands()
+    cmds = get_guild_cmds(interaction.guild.id)
+    cmds[name] = {
+        "description": description,
+        "prompt": prompt,
+    }
+    save_custom_commands()
+
+    await interaction.response.send_message(
+        f"✅ Custom command **{name}** created.\n"
+        f"Use `/run_custom` with that name to execute it.",
+        ephemeral=True,
+    )
+
+
+@admin_group.command(
+    name="list_custom",
+    description="List custom commands for this server."
+)
+async def list_custom_slash(interaction: discord.Interaction):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not is_staff(user):
+        return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+    load_custom_commands()
+    cmds = get_guild_cmds(interaction.guild.id)
+    if not cmds:
+        return await interaction.response.send_message(
+            "No custom commands defined yet.",
+            ephemeral=True,
+        )
+
+    lines = []
+    for name, meta in cmds.items():
+        lines.append(f"• **{name}** — {meta.get('description','')}")
+    txt = "\n".join(lines)
+
+    await interaction.response.send_message(
+        embed=make_embed(
+            title="⚙️ Custom Commands",
+            description=txt,
+            color=discord.Color.blurple(),
+        ),
+        ephemeral=True,
+    )
 
 @admin_group.command(
     name="dm_all",
@@ -3162,7 +3415,72 @@ async def admin_create_structure_slash(interaction: discord.Interaction):
         f"🏗 CEIL structure updated by {user}. "
         f"Categories created: {created_categories}, Channels created: {created_channels}.",
     )
+###############################################################
+# AUTO ROLE ON MEMBER JOIN
+###############################################################
 
+@bot.event
+async def on_member_join(member: discord.Member):
+    """
+    Automatically assign a role when a user joins (if configured).
+    Uses config['auto_role_name'].
+    """
+    guild = member.guild
+    role_name = config.get("auto_role_name")
+    if not role_name:
+        return
+
+    role = discord.utils.get(guild.roles, name=role_name)
+    if not role:
+        return
+
+    try:
+        await member.add_roles(role, reason="Auto-role on join")
+        await log_event(
+            guild,
+            f"👤 Auto-assigned role **{role_name}** to {member.mention} on join."
+        )
+    except Exception as e:
+        print(f"❌ Failed to auto-assign role {role_name} to {member}: {e}")
+
+@admin_group.command(
+    name="set_autorole",
+    description="Set which role is auto-assigned when members join."
+)
+@app_commands.describe(
+    role="Role to auto-assign on member join."
+)
+async def set_autorole_slash(
+    interaction: discord.Interaction,
+    role: discord.Role,
+):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not is_staff(user):
+        return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+    config["auto_role_name"] = role.name
+    save_config()
+    await interaction.response.send_message(
+        f"✅ Auto-role set to **{role.name}**.",
+        ephemeral=True,
+    )
+
+
+@admin_group.command(
+    name="clear_autorole",
+    description="Disable auto-assigning roles on join."
+)
+async def clear_autorole_slash(interaction: discord.Interaction):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not is_staff(user):
+        return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
+
+    config["auto_role_name"] = ""
+    save_config()
+    await interaction.response.send_message(
+        "✅ Auto-role disabled.",
+        ephemeral=True,
+    )
 
 ###############################################################
 # 42. TEACHER REGISTRATION & PROGRESSION TRACKING
@@ -3207,6 +3525,39 @@ def get_teacher_record(guild_id: int, user_id: int):
             "progress_updates": []
         }
     return teacher_progress[gid][uid]
+###############################################################
+# CUSTOM AI COMMANDS (per guild)
+###############################################################
+
+CUSTOM_CMDS_FILE = "custom_commands.json"
+custom_commands: dict = {}  # {guild_id: {name: {description, prompt}}}
+
+
+def load_custom_commands():
+    global custom_commands
+    if os.path.exists(CUSTOM_CMDS_FILE):
+        try:
+            with open(CUSTOM_CMDS_FILE, "r", encoding="utf-8") as f:
+                custom_commands = json.load(f)
+        except Exception:
+            custom_commands = {}
+    else:
+        custom_commands = {}
+
+
+def save_custom_commands():
+    try:
+        with open(CUSTOM_CMDS_FILE, "w", encoding="utf-8") as f:
+            json.dump(custom_commands, f, indent=2)
+    except Exception as e:
+        print("❌ ERROR writing custom_commands.json:", e)
+
+
+def get_guild_cmds(guild_id: int) -> dict:
+    gid = str(guild_id)
+    if gid not in custom_commands:
+        custom_commands[gid] = {}
+    return custom_commands[gid]
 
 
 @bot.tree.command(
@@ -3827,6 +4178,40 @@ async def dashboard_slash(interaction: discord.Interaction):
     embed = dashboard_embed("🛠️ CEIL ADMIN DASHBOARD V3", desc)
     view = DashboardMainView()
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+@bot.tree.command(
+    name="run_custom",
+    description="Run a custom AI command defined for this server."
+)
+@app_commands.describe(
+    name="Name of the custom command.",
+    input="Your input for the command."
+)
+async def run_custom_slash(
+    interaction: discord.Interaction,
+    name: str,
+    input: str,
+):
+    await interaction.response.defer(thinking=True)
+
+    load_custom_commands()
+    cmds = get_guild_cmds(interaction.guild.id)
+    meta = cmds.get(name.lower())
+
+    if not meta:
+        return await interaction.followup.send(
+            f"❌ No custom command named `{name}`.",
+            ephemeral=True,
+        )
+
+    base_prompt = meta.get("prompt", "")
+    full_prompt = (
+        base_prompt
+        + "\n\nUser input:\n"
+        + input
+    )
+    # Use general AI with CEIL context
+    result = await ai_general_reply(full_prompt, interaction.user.display_name, "general")
+    await interaction.followup.send(result)
 
 
 ###############################################################
@@ -4093,6 +4478,162 @@ async def grade_handwriting_slash(
     result = await teacher_llm(prompt)
     await interaction.followup.send(result)
 
+###############################################################
+# IMAGE GENERATOR — /imagine
+###############################################################
+
+@bot.tree.command(
+    name="imagine",
+    description="Generate an image from a text prompt (poster, avatar, scene, etc.)."
+)
+@app_commands.describe(
+    prompt="Describe what you want to see.",
+    size="Image size (512, 768, 1024)."
+)
+async def imagine_slash(
+    interaction: discord.Interaction,
+    prompt: str,
+    size: int = 1024,
+):
+    if not config.get("images_enabled", True):
+        return await interaction.response.send_message(
+            "Image tools are disabled.",
+            ephemeral=True,
+        )
+
+    if size not in (512, 768, 1024):
+        size = 1024
+
+    await interaction.response.defer(thinking=True)
+
+    try:
+        img_resp = client_oai.images.generate(
+            model="gpt-image-1",
+            prompt=prompt,
+            size=f"{size}x{size}",
+            n=1,
+        )
+        b64_data = img_resp.data[0].b64_json
+        img_bytes = base64.b64decode(b64_data)
+
+        file = discord.File(
+            io.BytesIO(img_bytes),
+            filename="imagine.png",
+        )
+        await interaction.followup.send(
+            content=f"🖼️ Prompt: `{prompt}`",
+            file=file,
+        )
+    except Exception as e:
+        print("❌ IMAGE GENERATION ERROR:", e)
+        await interaction.followup.send(
+            "⚠ Failed to generate image.",
+            ephemeral=True,
+        )
+###############################################################
+# AI VOICE ASSISTANT — TTS + Voice Reply
+###############################################################
+
+@bot.tree.command(
+    name="tts",
+    description="Text-to-speech: generate an audio file from text."
+)
+@app_commands.describe(
+    text="What should I say?",
+    voice_hint="Optional: short hint for style/voice (calm, energetic, teacher, etc.)."
+)
+async def tts_slash(
+    interaction: discord.Interaction,
+    text: str,
+    voice_hint: str = "teacher",
+):
+    await interaction.response.defer(thinking=True)
+
+    try:
+        audio_resp = client_oai.audio.speech.create(
+            model="gpt-4o-mini-tts",
+            voice="alloy",
+            input=text,
+        )
+        audio_bytes = audio_resp.read()
+
+        file = discord.File(
+            io.BytesIO(audio_bytes),
+            filename="tts.mp3",
+        )
+        await interaction.followup.send(
+            content=f"🎧 TTS generated (voice hint: `{voice_hint}`)",
+            file=file,
+        )
+    except Exception as e:
+        print("❌ TTS ERROR:", e)
+        await interaction.followup.send(
+            "⚠ Failed to generate audio.",
+            ephemeral=True,
+        )
+
+
+@bot.tree.command(
+    name="voice_reply",
+    description="Send a short voice note; the bot transcribes and replies."
+)
+@app_commands.describe(
+    audio="Upload a short audio file (voice note).",
+    mode="Reply style: general, tutor, admin."
+)
+async def voice_reply_slash(
+    interaction: discord.Interaction,
+    audio: discord.Attachment,
+    mode: str = "general",
+):
+    await interaction.response.defer(thinking=True)
+
+    try:
+        audio_bytes = await audio.read()
+    except Exception:
+        return await interaction.followup.send(
+            "Failed to read audio file.",
+            ephemeral=True,
+        )
+
+    # Save temporarily in memory
+    temp_fp = io.BytesIO(audio_bytes)
+    temp_fp.name = "voice_input.m4a"  # name hint
+
+    try:
+        transcript_obj = client_oai.audio.transcriptions.create(
+            model="gpt-4o-mini-transcribe",
+            file=temp_fp,
+            response_format="text",
+        )
+        transcript = transcript_obj
+    except Exception as e:
+        print("❌ TRANSCRIPTION ERROR:", e)
+        return await interaction.followup.send(
+            "⚠ Failed to transcribe audio.",
+            ephemeral=True,
+        )
+
+    # Route to appropriate LLM helper
+    content = transcript
+    user_name = interaction.user.display_name
+
+    if mode == "tutor":
+        reply = await teacher_llm(
+            f"Student voice note (transcribed):\n{content}\n\n"
+            "Respond as a supportive tutor."
+        )
+    elif mode == "admin":
+        reply = await admin_llm(
+            f"Voice note (transcribed):\n{content}\n\n"
+            "Respond in a professional, concise way."
+        )
+    else:
+        reply = await ai_general_reply(content, user_name, "general")
+
+    await interaction.followup.send(
+        f"🗣️ **Transcript:**\n{content}\n\n**Reply:**\n{reply}"
+    )
 
 ###############################################################
 # 47. AI AUTO-REPLY ENGINE — on_message
@@ -4317,6 +4858,91 @@ async def ai_general_reply(user_msg: str, user_name: str, mode: str) -> str:
     )
     return await call_openai(system_prompt, user_prompt, temperature=0.4)
 
+###############################################################
+# AI TUTOR MODE — learning-oriented assessment
+###############################################################
+
+async def tutor_llm(prompt: str, level: str | None = None) -> str:
+    """
+    Tutor mode: focused on learning-oriented assessment,
+    step-by-step questioning, and formative feedback.
+    """
+    level_info = f"Target learner level: {level}.\n" if level else ""
+    system = (
+        BASE_SYSTEM_PROMPT
+        + "\n\nYou are now in AI TUTOR MODE.\n"
+          "- Focus on formative assessment, not grades.\n"
+          "- Ask short, focused questions.\n"
+          "- Give clear, constructive feedback.\n"
+          "- Suggest next steps or micro-tasks.\n"
+        + MULTILINGUAL_NOTE
+    )
+    full_prompt = level_info + prompt
+    return await call_openai(system, full_prompt, temperature=0.4)
+
+
+@bot.tree.command(
+    name="tutor_session",
+    description="Generate a mini tutoring session plan for a learner."
+)
+@app_commands.describe(
+    level="Approximate CEFR level (A1–C1).",
+    skill="Main skill: grammar, vocabulary, speaking, writing, etc.",
+    topic="Topic or structure (e.g. present perfect, travel, complaints)."
+)
+async def tutor_session_slash(
+    interaction: discord.Interaction,
+    level: str,
+    skill: str,
+    topic: str,
+):
+    await interaction.response.defer(thinking=True)
+
+    prompt = (
+        f"Design a short tutoring sequence for a learner at level {level}.\n"
+        f"Skill focus: {skill}\n"
+        f"Topic: {topic}\n\n"
+        "Include:\n"
+        "1) Quick diagnostic question(s)\n"
+        "2) Micro-explanation adapted to the level\n"
+        "3) 3–5 practice items (with expected answers)\n"
+        "4) Feedback rules (how the tutor should respond to mistakes)\n"
+        "5) A short homework suggestion."
+    )
+    result = await tutor_llm(prompt, level=level)
+    await interaction.followup.send(result)
+
+
+@bot.tree.command(
+    name="tutor_assess",
+    description="Analyze a student's answer and give tutor-style feedback."
+)
+@app_commands.describe(
+    level="Approximate level (A1–C1).",
+    task="What was the task? (e.g. write an email, describe a picture).",
+    answer="Paste the student's answer here."
+)
+async def tutor_assess_slash(
+    interaction: discord.Interaction,
+    level: str,
+    task: str,
+    answer: str,
+):
+    await interaction.response.defer(thinking=True)
+
+    prompt = (
+        f"Learner level: {level}\n"
+        f"Task: {task}\n\n"
+        f"Student answer:\n{answer}\n\n"
+        "Give learning-oriented feedback:\n"
+        "1) Very short overall comment.\n"
+        "2) 3–5 key strengths.\n"
+        "3) 3–5 priority problems (grammar, vocab, organization, etc.).\n"
+        "4) Suggested improved version of a part of the answer.\n"
+        "5) 2–3 micro-tasks the learner can do next.\n"
+    )
+    result = await tutor_llm(prompt, level=level)
+    await interaction.followup.send(result)
 
 ###############################################################
 # 49. FINAL on_ready — sync everything
@@ -4342,6 +4968,18 @@ async def on_ready():
     # Load persistent data
     load_config()
     load_xp()
+    # teacher_progress helpers exist from Chunk 6
+    try:
+        load_teacher_progress()
+    except NameError:
+        pass
+    # Load persistent data
+    load_config()
+    load_xp()
+    try:
+        load_coins()
+    except NameError:
+        pass
     # teacher_progress helpers exist from Chunk 6
     try:
         load_teacher_progress()
@@ -4546,9 +5184,14 @@ if __name__ == "__main__":
     load_config()
     load_xp()
     try:
+        load_coins()
+    except NameError:
+        pass
+    try:
         load_teacher_progress()
     except NameError:
         pass
 
     print("🚀 Starting CEIL Full-Max Bot...")
     bot.run(DISCORD_TOKEN)
+
