@@ -2057,19 +2057,7 @@ async def observation_form_slash(
 ###############################################################
 # LEARNING-ORIENTED ASSESSMENT (LOA) COMMANDS
 ###############################################################
-
-@bot.tree.command(
-    name="loa_task",
-    description="Generate a learning-oriented assessment task (LOA) for your students."
-)
-@app_commands.describe(
-    level="Learner level (e.g. A2, B1, N4, N6)",
-    skill="Main skill (reading, writing, listening, speaking)",
-    objective="Specific learning objective / CAN-DO statement",
-)
-
-# ===== LOA TASK GENERATOR =====
-        ## ===== LOA FIX: REMOVE OLD SLASH COMMANDS =====
+# ===== LOA FIX: REMOVE OLD SLASH COMMANDS =====
 try:
     bot.tree.remove_command("loa_task")
 except:
@@ -2083,6 +2071,17 @@ try:
 except:
     pass
 # ==============================================
+
+@bot.tree.command(
+    name="loa_task",
+    description="Generate a learning-oriented assessment task (LOA) for your students."
+)
+@app_commands.describe(
+    level="Learner level (e.g. A2, B1, N4, N6)",
+    skill="Main skill (reading, writing, listening, speaking)",
+    objective="Specific learning objective / CAN-DO statement",
+)
+
 
 async def loa_task_slash(
     interaction: discord.Interaction,
