@@ -62,6 +62,18 @@ if GOOGLE_APPLICATION_CREDENTIALS_BASE64:
         print("❌ Failed to load Google credentials:", e)
 else:
     print("⚠ No GOOGLE_APPLICATION_CREDENTIALS_BASE64 provided.")
+    
+# ================= GOOGLE CONFIG =================
+GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID", "")
+GOOGLE_APPLICATION_CREDENTIALS_BASE64 = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64", "")
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+
+# Flag
+GOOGLE_READY = False
+google_credentials = None
+google_drive = None
+google_calendar = None
+google_youtube = None
 
 if GOOGLE_READY:
     try:
