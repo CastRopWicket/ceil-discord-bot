@@ -3336,6 +3336,26 @@ print("📦 Loaded CHUNK 6 (Admin + coordination suite + progression tracking)")
 # CEIL BOT — GOOGLE CENTER (Dashboard + Commands)
 ###############################################
 
+# -------------------------------
+# GOOGLE YOUTUBE SERVICE BUILDER
+# -------------------------------
+def build_youtube_service():
+    """Builds and returns a YouTube Data API service object."""
+    global YOUTUBE_API_KEY
+
+    if not YOUTUBE_API_KEY:
+        print("⚠ YOUTUBE_API_KEY not set.")
+        return None
+
+    try:
+        from googleapiclient.discovery import build
+        service = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
+        return service
+
+    except Exception as e:
+        print("❌ Failed to build YouTube service:", e)
+        return None
+
 class GoogleCenterView(View):
     def __init__(self):
         super().__init__(timeout=300)
