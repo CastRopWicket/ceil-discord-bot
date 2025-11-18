@@ -32,22 +32,36 @@ GOOGLE_APPLICATION_CREDENTIALS_BASE64 = os.getenv("GOOGLE_APPLICATION_CREDENTIAL
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 
 
-google_credentials = None
-if GOOGLE_APPLICATION_CREDENTIALS_BASE64 = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64", "")
-    try:
-        decoded = base64.b64decode(GOOGLE_CREDS_BASE64)
-        data = json.loads(decoded)
+# ===== Load Google Service Account Credentials =====
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
-        google_credentials = Credentials.from_service_account_info(
-            data,
+google_credentials = None
+google_drive = None
+google_calendar = None
+
+if GOOGLE_APPLICATION_CREDENTIALS_BASE64:
+    try:
+        decoded = base64.b64decode(GOOGLE_APPLICATION_CREDENTIALS_BASE64)
+        creds_dict = json.loads(decoded)
+
+        google_credentials = service_account.Credentials.from_service_account_info(
+            creds_dict,
             scopes=[
                 "https://www.googleapis.com/auth/drive",
-                "https://www.googleapis.com/auth/documents",
-                "https://www.googleapis.com/auth/spreadsheets",
-                "https://www.googleapis.com/auth/youtube.force-ssl",
                 "https://www.googleapis.com/auth/calendar",
+                "https://www.googleapis.com/auth/youtube"
             ]
         )
+
+        google_drive = build("drive", "v3", credentials=google_credentials)
+        google_calendar = build("calendar", "v3", credentials=google_credentials)
+
+        print("✅ Google services initialized.")
+    except Exception as e:
+        print("❌ Failed to load Google credentials:", e)
+else:
+    print("⚠ No GOOGLE_APPLICATION_CREDENTIALS_BASE64 provided.")
 
     except Exception as e:
         print("❌ Failed to parse Google credentials:", e)
