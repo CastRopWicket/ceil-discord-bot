@@ -68,84 +68,60 @@ try:
 
 except Exception as e:
     print(f"❌ Google initialization failed: {e}")
-# =============== GOOGLE CENTER BASE CONFIG ==================
-
+###############################################################
+# GOOGLE CENTER (Drive + Calendar + YouTube)
+###############################################################
 import base64
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
+# Load environment variables
 GOOGLE_APPLICATION_CREDENTIALS_BASE64 = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64", "")
+GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID", "")
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 
-# Google runtime flags
+# Runtime flags + service holders
 GOOGLE_READY = False
 google_credentials = None
 google_drive = None
 google_calendar = None
 google_youtube = None
 
-# =============== LOAD GOOGLE SERVICES =======================
-
 try:
     if GOOGLE_APPLICATION_CREDENTIALS_BASE64:
-        decoded = base64.b64decode(GOOGLE_APPLICATION_CREDENTIALS_BASE64).decode("utf-8")
-        creds_dict = json.loads(decoded)
+        decoded_json = base64.b64decode(GOOGLE_APPLICATION_CREDENTIALS_BASE64).decode("utf-8")
+        creds_dict = json.loads(decoded_json)
 
         google_credentials = service_account.Credentials.from_service_account_info(
             creds_dict,
             scopes=[
                 "https://www.googleapis.com/auth/drive",
                 "https://www.googleapis.com/auth/calendar",
-                "https://www.googleapis.com/auth/youtube.force-ssl",
-                "https://www.googleapis.com/auth/youtube.upload"
+                "https://www.googleapis.com/auth/youtube.force-ssl"
             ]
         )
 
-        # Initialize clients
+        # Initialize Drive
         google_drive = build("drive", "v3", credentials=google_credentials)
+
+        # Initialize Calendar
         google_calendar = build("calendar", "v3", credentials=google_credentials)
-        google_youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
+
+        # Initialize YouTube
+        if YOUTUBE_API_KEY:
+            google_youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
+        else:
+            print("⚠ YOUTUBE_API_KEY not set — YouTube disabled.")
 
         GOOGLE_READY = True
         print("✅ Google services initialized.")
-
     else:
-        print("⚠ GOOGLE_APPLICATION_CREDENTIALS_BASE64 not set — Google Center disabled.")
+        print("⚠ GOOGLE_APPLICATION_CREDENTIALS_BASE64 not set — Google disabled.")
 
 except Exception as e:
+    GOOGLE_READY = False
     print(f"❌ Google initialization failed: {e}")
-    
-else:
-    print("⚠ No GOOGLE_APPLICATION_CREDENTIALS_BASE64 provided.")
-    
-# ================= GOOGLE CONFIG =================
-GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID", "")
-GOOGLE_APPLICATION_CREDENTIALS_BASE64 = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_BASE64", "")
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 
-# Flag
-GOOGLE_READY = False
-google_credentials = None
-google_drive = None
-google_calendar = None
-google_youtube = None
-
-if GOOGLE_READY:
-    try:
-        from googleapiclient.discovery import build
-
-        drive_service = build("drive", "v3", credentials=google_credentials)
-        docs_service = build("docs", "v1", credentials=google_credentials)
-        sheets_service = build("sheets", "v4", credentials=google_credentials)
-        calendar_service = build("calendar", "v3", credentials=google_credentials)
-
-        print("✅ Google services initialized.")
-
-    except Exception as e:
-        print("❌ Failed to build Google API clients:", e)
-        GOOGLE_READY = False
-else:
-    print("❌ No Google credentials provided.")
 
 # ============ FIX: GUARANTEE admin_group ALWAYS EXISTS ============
 # Some chunks load out of order during Railway hot reloads.
