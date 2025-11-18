@@ -3511,7 +3511,12 @@ class RefreshButton(Button):
 
 class CloseDashboardButton(Button):
     def __init__(self):
-        super().__init__(style=discord.ButtonStyle.danger, label="Close", emoji="🗙", row=1)
+        super().__init__(
+            style=discord.ButtonStyle.danger,
+            label="Close",
+            emoji="❌",   # fixed emoji
+            row=1
+        )
 
     async def callback(self, interaction: discord.Interaction):
         if not await ensure_admin_interaction(interaction):
