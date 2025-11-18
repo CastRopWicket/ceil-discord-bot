@@ -24,7 +24,17 @@ from discord import app_commands
 from openai import OpenAI
 from discord.ui import View, Button, Select
 from discord import SelectOption
+# === GROK (xAI) SUPPORT - MINIMUM VERSION ===
+from openai import AsyncOpenAI
 
+# Create Grok client if you added the key in Railway
+grok_client = None
+if os.getenv("XAI_API_KEY"):
+    grok_client = AsyncOpenAI(
+        api_key=os.getenv("XAI_API_KEY"),
+        base_url="https://api.x.ai/v1"
+    )
+    print("✅ Grok (xAI) is active – bot will use Grok-4")
 # =============== GOOGLE CENTER BASE CONFIG ==================
 
 import base64
@@ -290,29 +300,41 @@ client_oai = OpenAI(api_key=OPENAI_API_KEY)
 
 
 async def call_openai(system_prompt: str, user_prompt: str, temperature: float = 0.4):
-    """
-    Safely call OpenAI with error handling and resiliency.
-    Returns the LLM output text.
-    """
+    # Use Grok first
+    if grok_client:
+        try:
+            response = await grok_client.chat.completions.create(
+                model=os.getenv("GROK_PRIMARY_MODEL", "grok-4"),
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=temperature,
+                max_tokens=4096
+            )
+            reply = response.choices[0].message.content.strip()
+            if len(reply) > 1900:
+                reply = reply[:1900] + "\n\n[...truncated]"
+            return reply
+        except Exception as e:
+            print(f"Grok failed ({e}), falling back to OpenAI...")
+
+    # Old OpenAI code (keeps working as backup)
     try:
         response = client_oai.chat.completions.create(
-            model=config.get("ai_model", "gpt-4.1-mini"),
+            model=config.get("ai_model", "gpt-4o-mini"),
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
+                {"role": "user", "content": user_prompt}
             ],
-            temperature=temperature,
+            temperature=temperature
         )
-        content = response.choices[0].message.content.strip()
-        max_len = config.get("max_reply_length", 1900)
-        if len(content) > max_len:
-            content = content[:max_len] + "\n\n[Truncated]"
-        return content
-
-    except Exception as e:
-        print("❌ OPENAI API ERROR:", e)
-        traceback.print_exc()
-        return "⚠ Sorry, I encountered an error while processing your request."
+        reply = response.choices[0].message.content.strip()
+        if len(reply) > 1900:
+            reply = reply[:1900] + "\n\n[...truncated]"
+        return reply
+    except:
+        return "AI is temporarily unavailable."
 
 
 ###############################################################
