@@ -164,9 +164,11 @@ if not DISCORD_TOKEN:
         "Set it before running the bot."
     )
 
-if not OPENAI_API_KEY:
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # can be missing now
+
+if not OPENAI_API_KEY and not os.getenv("XAI_API_KEY"):
     raise RuntimeError(
-        "❌ ERROR: OPENAI_API_KEY environment variable is missing."
+        "❌ ERROR: You need at least ONE API key: OPENAI_API_KEY or XAI_API_KEY"
     )
 
 ###############################################################
