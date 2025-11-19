@@ -2073,7 +2073,7 @@ async def ai_generate(user, title: str, instruction: str):
     )
 
     try:
-        return await ai_generate_response(user, instruction, system_msg=system)
+        return await ai_generate_response(user_msg=prompt)
     except Exception as e:
         print(f"[AI V2 ERROR] {title}:", e)
         return f"❌ AI processing failed in **{title}**."
