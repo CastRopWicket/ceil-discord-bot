@@ -4916,10 +4916,10 @@ class TestGoogleStatusButton(Button):
 ###############################################
 
 @bot.tree.command(name="dashboard", description="Open the CEIL Admin Dashboard V3")
-async def dashboard_slash(interaction: discord.Interaction):
-    # Protect with staff permissions
-    if not await ensure_admin_interaction(interaction):
-        return
+    async def dashboard_slash(interaction: discord.Interaction):
+        # Protect with staff permissions
+        if not await ensure_admin_interaction(interaction):
+            return
 
     desc = (
         "Welcome to the **CEIL Admin Dashboard V3**.\n\n"
