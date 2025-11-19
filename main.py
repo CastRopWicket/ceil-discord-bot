@@ -2106,26 +2106,19 @@ def _teacher_is_allowed(member: discord.Member) -> bool:
     skills="Skills to target (e.g. listening, speaking, writing, reading)",
     constraints="Context / constraints (time, tools, online/offline, etc.)",
 )
-async def loa_plus_generate(interaction, student_name: str, objective: str, evidence: str):
-    prompt = f"""
-Create a Learning-Oriented Assessment (LOA) report.
-
-STUDENT: {student_name}
-OBJECTIVE: {objective}
-EVIDENCE OBSERVED: {evidence}
-
-FORMAT:
-1. TARGET OUTCOME (CEFR-aligned)
-2. DIAGNOSTIC ANALYSIS (strengths & gaps)
-3. LEARNING EVIDENCE (clear indicators)
-4. NEXT ACTIONS (L1 - L2 - L3 progression)
-5. ASSESSMENT FOR LEARNING (AfL suggestions)
-6. FEEDBACK TO LEARNER (simple, direct)
-"""
-
-    text = await ai_generate(interaction.user, "LOA+", prompt)
-    return text
-
+async def loa_plus_slash(
+    interaction: discord.Interaction,
+    level: str,
+    objective: str,
+    skills: str,
+    constraints: str,
+):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not _teacher_is_allowed(user):
+        return await interaction.response.send_message(
+            "❌ This command is for teachers / coordinators only.",
+            ephemeral=True,
+        )
 
     prompt = f"""
 You are an expert in **learning-oriented assessment** (LOA) and teacher professional development.
