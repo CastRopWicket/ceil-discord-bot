@@ -2065,8 +2065,8 @@ async def call_ai_simple(prompt: str) -> str:
     Adjust ONLY the internal return line to match your actual AI function.
     """
     try:
-        # If your bot already uses generate_ai_response(), use this:
-        return await generate_ai_response(prompt)
+        # If your bot already uses ai_generate_response(), use this:
+        return await ai_generate_response(prompt)
 
         # If your bot uses something else, replace the above line with the correct one.
         # Examples:
