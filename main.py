@@ -4327,7 +4327,15 @@ class DashboardRefreshButton(Button):
 
 
 @app_commands.checks.has_permissions(administrator=True)
-
+ async def callback(self, interaction: discord.Interaction):
+        """Single correct signature – discord will call callback(interaction) only."""
+        # Basic admin guard
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "You need administrator permissions to use the dashboard.",
+                ephemeral=True,
+            )
+            return
     total_members = guild.member_count or 0
     online_members = sum(
         1 for m in guild.members if m.status != discord.Status.offline
