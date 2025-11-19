@@ -2104,7 +2104,7 @@ async def ai_generate_response(system_msg: str = None, user_msg: str = None):
 # LOA+ (Advanced Learning-Oriented Assessment)
 ###############################################
 
-@tree.command(name="loa_plus", description="Generate a full Learning-Oriented Assessment package (V2).")
+@bot.tree.command(name="loa_plus", description="Generate a full Learning-Oriented Assessment package (V2).")
 @app_commands.describe(
     level="Student level (A1–C2)",
     skill="Skill to assess (reading, listening, speaking, writing, grammar, vocabulary)",
