@@ -3387,22 +3387,6 @@ async def admin_dm_all_slash(
     name="dashboard",
     description="Open interactive Admin Dashboard v2 (feature toggles, banned words, config)."
 )
-async def admin_dashboard_slash(interaction: discord.Interaction):
-    user = interaction.user
-    if not isinstance(user, discord.Member) or not is_staff(user):
-        return await interaction.response.send_message("❌ Not authorized.", ephemeral=True)
-
-    await interaction.response.defer(ephemeral=True, thinking=True)
-
-    view = AdminDashboardView(user)
-    embed = build_admin_dashboard_embed()
-
-    await interaction.followup.send(
-        content="🛠 Admin Dashboard v2 loaded.",
-        embed=embed,
-        view=view,
-        ephemeral=True,
-    )
     ###############################################################
 # COINS SLASH COMMANDS
 ###############################################################
@@ -4343,18 +4327,6 @@ class DashboardRefreshButton(Button):
 
 
 @app_commands.checks.has_permissions(administrator=True)
-@bot.tree.command(name="dashboard", description="Open the CEIL admin dashboard (V3).")
-async def dashboard_slash(interaction: discord.Interaction):
-    """Slash command entry point for dashboard V3."""
-    guild = interaction.guild
-    global config  # type: ignore
-
-    if guild is None:
-        await interaction.response.send_message(
-            "This command can only be used inside a server.",
-            ephemeral=True,
-        )
-        return
 
     total_members = guild.member_count or 0
     online_members = sum(
@@ -4916,10 +4888,10 @@ class TestGoogleStatusButton(Button):
 ###############################################
 
 @bot.tree.command(name="dashboard", description="Open the CEIL Admin Dashboard V3")
-    async def dashboard_slash(interaction: discord.Interaction):
-        # Protect with staff permissions
-        if not await ensure_admin_interaction(interaction):
-            return
+async def dashboard_slash(interaction: discord.Interaction):
+    # Protect with staff permissions
+    if not await ensure_admin_interaction(interaction):
+        return
 
     desc = (
         "Welcome to the **CEIL Admin Dashboard V3**.\n\n"
