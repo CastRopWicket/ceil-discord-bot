@@ -2078,6 +2078,23 @@ async def ai_generate(user, title: str, instruction: str):
         print(f"[AI V2 ERROR] {title}:", e)
         return f"❌ AI processing failed in **{title}**."
 
+###########################################################
+# GLOBAL AI HELPER FOR ALL V2 MODULES (LOA, PD, REPORT...)
+###########################################################
+
+async def ai_generate_response(prompt: str) -> str:
+    """
+    Unified AI generator used by all V2 teacher tools.
+    It safely calls your existing call_ai_simple() function.
+    """
+    try:
+        # Your existing fast AI call
+        from main import call_ai_simple  # if needed or remove if already in scope
+        response = await call_ai_simple(prompt)
+        return response or "AI returned an empty response."
+    except Exception as e:
+        print(f"[AI V2 ERROR] {e}")
+        return f"[AI V2 ERROR] {e}"
 
 ###############################################################
 # LOA+  — Learning-Oriented Assessment V2
