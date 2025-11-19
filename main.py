@@ -2059,15 +2059,25 @@ async def observation_form_slash(
 # Makes new V2 commands use your existing AI engine.
 # ============================================================
 
-async def call_ai_simple(prompt: str) -> str:
-    """Simple wrapper to call the bot's AI engine safely."""
+async def ai_generate(user, title: str, instruction: str):
+    """
+    CEIL Unified AI Engine V2
+    - title = module name (LOA, PD, REPORT, LESSON, RESEARCH)
+    - instruction = the actual prompt
+    """
+
+    system = (
+        f"You are CEIL AI V2. Module: {title}. "
+        f"Respond concisely, professionally, and directly. "
+        f"Respect CEIL formatting. Avoid emojis unless explicitly requested."
+    )
+
     try:
-        # Use your existing AI engine
-        response = await ai_generate_response("SYSTEM", prompt)
-        return response or "AI returned an empty response."
+        return await ai_generate_response(user, instruction, system_msg=system)
     except Exception as e:
-        print(f"[call_ai_simple] AI error:", e)
-        return "⚠️ AI engine error. Check logs."
+        print(f"[AI V2 ERROR] {title}:", e)
+        return f"❌ AI processing failed in **{title}**."
+
 
 # ===========================================
 # LOA / PD / TEACHER REPORT – V2 COMMANDS
