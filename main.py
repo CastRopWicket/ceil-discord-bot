@@ -4327,7 +4327,7 @@ class DashboardRefreshButton(Button):
 
 
 @app_commands.checks.has_permissions(administrator=True)
- async def callback(self, interaction: discord.Interaction):
+async def callback(self, interaction: discord.Interaction):
         """Single correct signature – discord will call callback(interaction) only."""
         # Basic admin guard
         if not interaction.user.guild_permissions.administrator:
