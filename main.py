@@ -3391,7 +3391,7 @@ async def admin_dm_all_slash(
 # COINS SLASH COMMANDS
 ###############################################################
 
-@tree.command(name="coins", description="Check your coins or someone else's coins.")
+@bot.tree.command(name="coins", description="Check your coins or someone else's coins.")
 @app_commands.describe(member="User to check (optional)")
 async def coins_slash(interaction: discord.Interaction, member: discord.Member | None = None):
     user = member or interaction.user
@@ -3409,8 +3409,6 @@ async def coins_slash(interaction: discord.Interaction, member: discord.Member |
     )
     embed.set_thumbnail(url=user.avatar.url if user.avatar else "")
     await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
 
 @bot.tree.command(
     name="coins_daily",
