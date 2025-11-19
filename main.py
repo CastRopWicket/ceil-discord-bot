@@ -2054,6 +2054,227 @@ async def observation_form_slash(
     text = await teacher_llm(prompt)
     await interaction.followup.send(text)
 
+# ===========================================
+# LOA / PD / TEACHER REPORT – V2 COMMANDS
+# ===========================================
+
+teacher_group = app_commands.Group(
+    name="teacher",
+    description="Teacher tools (LOA, PD, reports) – V2",
+    guild_only=True,
+)
+
+
+def _teacher_is_allowed(member: discord.Member) -> bool:
+    # Reuse your existing staff logic if you want:
+    # return is_staff(member)
+    return member.guild_permissions.manage_guild or member.guild_permissions.administrator
+
+
+@teacher_group.command(
+    name="loa_plus",
+    description="Design a learning-oriented assessment task (V2).",
+)
+@app_commands.describe(
+    level="Student level (A1–C2 or custom)",
+    objective="Learning objective / outcome",
+    skills="Skills to target (e.g. listening, speaking, writing, reading)",
+    constraints="Context / constraints (time, tools, online/offline, etc.)",
+)
+async def loa_plus_slash(
+    interaction: discord.Interaction,
+    level: str,
+    objective: str,
+    skills: str,
+    constraints: str,
+):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not _teacher_is_allowed(user):
+        return await interaction.response.send_message(
+            "❌ This command is for teachers / coordinators only.",
+            ephemeral=True,
+        )
+
+    prompt = f"""
+You are an expert in **learning-oriented assessment** (LOA) and teacher professional development.
+
+Design a **single assessment task** that is:
+- clearly aligned with this level: {level}
+- targets these skills: {skills}
+- addresses this objective: {objective}
+- respects these constraints: {constraints}
+
+Output in **bullet format** with these sections:
+
+1. *Task overview* (short description)
+2. *Learning targets* (2–4 bullet points, very clear, learner-friendly)
+3. *In-class procedure* (step-by-step, teacher-facing)
+4. *Evidence of learning* (what the teacher observes / collects)
+5. *Feedback moves* (how teacher gives formative feedback)
+6. *Learner self-assessment* (simple prompts students can answer)
+7. *Differentiation* (at least 2 ideas for weaker/stronger learners)
+"""
+
+    response_text = await call_ai_simple(prompt)  # reuse your existing AI call helper
+    embed = discord.Embed(
+        title="📌 LOA Task (V2)",
+        description=response_text[:4000],
+        color=discord.Color.green(),
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@teacher_group.command(
+    name="pd_plus",
+    description="Create a short PD plan focused on a specific classroom issue.",
+)
+@app_commands.describe(
+    issue="Classroom issue or challenge (e.g. low participation, mixed levels)",
+    time="Available PD time (e.g. 30 min, 1h, 2h workshop)",
+    context="Context (e.g. university ESP, secondary school, online classes)",
+)
+async def pd_plus_slash(
+    interaction: discord.Interaction,
+    issue: str,
+    time: str,
+    context: str,
+):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not _teacher_is_allowed(user):
+        return await interaction.response.send_message(
+            "❌ This command is for teachers / coordinators only.",
+            ephemeral=True,
+        )
+
+    prompt = f"""
+You are designing a **teacher professional development (PD) session**.
+
+Context: {context}
+Time available: {time}
+Main issue: {issue}
+
+Design a **practical PD plan** with these sections:
+
+1. *Goal of the session* (SMART formulation)
+2. *Warm-up / activation* (5–10 minutes)
+3. *Core input* (theory or examples)
+4. *Collaborative task* (teachers apply ideas to their own classes)
+5. *Action plan* (each teacher leaves with 1–2 concrete actions)
+6. *Follow-up / evidence* (how we know the PD had an impact)
+"""
+
+    response_text = await call_ai_simple(prompt)
+    embed = discord.Embed(
+        title="📚 PD Plan (V2)",
+        description=response_text[:4000],
+        color=discord.Color.blue(),
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@teacher_group.command(
+    name="report_plus",
+    description="Generate a structured observation / lesson report.",
+)
+@app_commands.describe(
+    lesson_focus="Focus of the observed lesson (e.g. speaking fluency)",
+    strengths="What went well (notes / bullet points)",
+    areas="Areas for development",
+)
+async def teacher_report_plus_slash(
+    interaction: discord.Interaction,
+    lesson_focus: str,
+    strengths: str,
+    areas: str,
+):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not _teacher_is_allowed(user):
+        return await interaction.response.send_message(
+            "❌ This command is for teachers / coordinators only.",
+            ephemeral=True,
+        )
+
+    prompt = f"""
+You are writing a **professional, supportive lesson observation report**.
+
+Lesson focus: {lesson_focus}
+Observed strengths: {strengths}
+Areas for development: {areas}
+
+Write the report with these sections:
+
+1. *Context & focus*
+2. *Evidence-based strengths* (with short concrete examples)
+3. *Areas for development* (linked to evidence, 2–3 key points)
+4. *Actionable next steps* (practical, time-bound)
+5. *Suggested support* (what the institution / coordinator can do)
+"""
+
+    response_text = await call_ai_simple(prompt)
+    embed = discord.Embed(
+        title="📝 Lesson Observation Report (V2)",
+        description=response_text[:4000],
+        color=discord.Color.purple(),
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@teacher_group.command(
+    name="coordination_plus",
+    description="Summarize a coordination meeting and actions.",
+)
+@app_commands.describe(
+    agenda="Main points discussed / agenda",
+    decisions="Key decisions taken",
+    tasks="Tasks assigned (who does what, by when)",
+)
+async def coordination_plus_slash(
+    interaction: discord.Interaction,
+    agenda: str,
+    decisions: str,
+    tasks: str,
+):
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not _teacher_is_allowed(user):
+        return await interaction.response.send_message(
+            "❌ This command is for coordinators / admins only.",
+            ephemeral=True,
+        )
+
+    prompt = f"""
+You are summarizing a **teachers' coordination meeting**.
+
+Agenda:
+{agenda}
+
+Decisions:
+{decisions}
+
+Tasks:
+{tasks}
+
+Produce a summary with:
+
+1. *Meeting overview* (date, context – leave date generic)
+2. *Key decisions* (clear bullet points)
+3. *Action table* (who / what / by when – as markdown bullet format)
+4. *Risks or open questions*
+5. *Next meeting focus* (proposal)
+"""
+
+    response_text = await call_ai_simple(prompt)
+    embed = discord.Embed(
+        title="🤝 Coordination Summary (V2)",
+        description=response_text[:4000],
+        color=discord.Color.teal(),
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# Finally, register the group on the tree
+bot.tree.add_command(teacher_group)
+
+
 ###############################################################
 # LEARNING-ORIENTED ASSESSMENT (LOA) COMMANDS
 ###############################################################
@@ -3566,6 +3787,281 @@ async def admin_dashboard_slash(interaction: discord.Interaction):
         view=view,
         ephemeral=True,
     )
+    # ===========================================
+# DASHBOARD V3 (NON-BREAKING UPGRADE)
+# ===========================================
+
+def build_dashboard_v3_embed(guild: discord.Guild) -> discord.Embed:
+    total_members = guild.member_count or 0
+    online_members = sum(1 for m in guild.members if m.status != discord.Status.offline)
+
+    desc = (
+        f"### 🛠️ CEIL ADMIN DASHBOARD V3\n\n"
+        f"**Members**\n"
+        f"- Total: **{total_members}**\n"
+        f"- Online: **{online_members}**\n\n"
+        f"**Features**\n"
+        f"- AI: {'✅' if config.get('ai_enabled', True) else '❌'}\n"
+        f"- Moderation: {'✅' if config.get('moderation_enabled', True) else '❌'}\n"
+        f"- XP: {'✅' if config.get('xp_enabled', True) else '❌'}\n"
+        f"- Fun: {'✅' if config.get('fun_enabled', True) else '❌'}\n"
+        f"- Lessons: {'✅' if config.get('lessons_enabled', True) else '❌'}\n"
+        f"- Research: {'✅' if config.get('research_enabled', True) else '❌'}\n"
+        f"- Images/Vision: {'✅' if config.get('images_enabled', True) else '❌'}\n\n"
+        "Use the buttons below to open sub-panels:\n"
+        "- **General** → feature toggles\n"
+        "- **Teacher / LOA & PD** → assessment & PD tools\n"
+        "- **Moderation** → basic moderation info\n"
+        "- **XP & Games** → XP / blackjack coins tools\n"
+        "- **Google Center** → Google status summary\n"
+        "- **Server Tools** → quick links to management commands"
+    )
+
+    embed = discord.Embed(
+        title="🛠️ CEIL ADMIN DASHBOARD V3",
+        description=desc,
+        color=discord.Color.blurple(),
+    )
+    embed.set_footer(text=f"Guild ID: {guild.id}")
+    return embed
+class DashboardV3View(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=180)
+
+        # Row 0 – main sections
+        self.add_item(DashboardV3GeneralButton())
+        self.add_item(DashboardV3TeacherButton())
+        self.add_item(DashboardV3ModerationButton())
+
+        # Row 1 – more sections
+        self.add_item(DashboardV3XPButton())
+        self.add_item(DashboardV3GoogleButton())
+        self.add_item(DashboardV3ServerToolsButton())
+
+        # Row 2 – close
+        self.add_item(DashboardV3CloseButton())
+
+
+async def _ensure_admin(interaction: discord.Interaction) -> bool:
+    """Simple admin guard for dashboard buttons."""
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not user.guild_permissions.administrator:
+        await interaction.response.send_message(
+            "❌ You need **administrator** permissions to use this dashboard.",
+            ephemeral=True,
+        )
+        return False
+    return True
+
+
+class DashboardV3GeneralButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            style=discord.ButtonStyle.primary,
+            label="General",
+            emoji="⚙️",
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await _ensure_admin(interaction):
+            return
+
+        desc = (
+            "### ⚙️ General Settings\n\n"
+            "Use `/panel features` to toggle:\n"
+            "- AI / moderation / XP / games / lessons / research / images\n\n"
+            "Use `/panel xp` to adjust XP & coins for users.\n\n"
+            "This section is meant as a **quick overview**.\n"
+        )
+        embed = discord.Embed(
+            title="⚙️ General Settings – CEIL",
+            description=desc,
+            color=discord.Color.blurple(),
+        )
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+class DashboardV3TeacherButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            style=discord.ButtonStyle.primary,
+            label="Teacher / LOA & PD",
+            emoji="📚",
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await _ensure_admin(interaction):
+            return
+
+        desc = (
+            "### 📚 Teacher / LOA & PD Tools\n\n"
+            "Suggested commands (depending on what you have enabled):\n"
+            "- `/loa_plus` – design a learning-oriented task\n"
+            "- `/pd_plus` – build a PD plan\n"
+            "- `/teacher_report_plus` – structured lesson observation report\n"
+            "- `/coordination_plus` – coordination / meeting summary\n\n"
+            "You can pin these commands in a **teachers-only** channel.\n"
+        )
+        embed = discord.Embed(
+            title="📚 Teacher / LOA & PD",
+            description=desc,
+            color=discord.Color.green(),
+        )
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+class DashboardV3ModerationButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            style=discord.ButtonStyle.secondary,
+            label="Moderation",
+            emoji="🛡️",
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await _ensure_admin(interaction):
+            return
+
+        desc = (
+            "### 🛡️ Moderation Overview\n\n"
+            "Use existing moderation commands you already have configured:\n"
+            "- warnings / slowmode / link filters / banned words\n\n"
+            "Dashboard tip: you can combine this with `/panel features` and your\n"
+            "existing admin tools to keep CEIL aligned with **safe interactions**.\n"
+        )
+        embed = discord.Embed(
+            title="🛡️ Moderation Overview",
+            description=desc,
+            color=discord.Color.red(),
+        )
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+class DashboardV3XPButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            style=discord.ButtonStyle.secondary,
+            label="XP & Games",
+            emoji="🎮",
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await _ensure_admin(interaction):
+            return
+
+        desc = (
+            "### 🎮 XP & Games\n\n"
+            "Blackjack & coins are tied into your XP system.\n"
+            "Useful commands:\n"
+            "- `/panel xp` → open XP control panel\n"
+            "- `!blackjack` → play blackjack with coins\n"
+            "- `/coins` → show coins (slash version)\n\n"
+            "You can limit games to specific channels with your existing config.\n"
+        )
+        embed = discord.Embed(
+            title="🎮 XP & Games",
+            description=desc,
+            color=discord.Color.gold(),
+        )
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+class DashboardV3GoogleButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            style=discord.ButtonStyle.secondary,
+            label="Google Center",
+            emoji="🧩",
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await _ensure_admin(interaction):
+            return
+
+        google_status = "✅ READY" if GOOGLE_READY else "⚠️ DISABLED (no creds)"
+        yt_status = "✅ KEY SET" if os.getenv("YOUTUBE_API_KEY") else "⚠️ NOT SET"
+
+        desc = (
+            "### 🧩 Google Center\n\n"
+            f"- Service account: **{google_status}**\n"
+            f"- YouTube API key: **{yt_status}**\n\n"
+            "If something is disabled, check your environment variables:\n"
+            "- `GOOGLE_APPLICATION_CREDENTIALS_BASE64`\n"
+            "- `YOUTUBE_API_KEY`\n"
+        )
+        embed = discord.Embed(
+            title="🧩 Google Center",
+            description=desc,
+            color=discord.Color.dark_teal(),
+        )
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+class DashboardV3ServerToolsButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            style=discord.ButtonStyle.secondary,
+            label="Server Tools",
+            emoji="🛠️",
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await _ensure_admin(interaction):
+            return
+
+        desc = (
+            "### 🛠️ Server Tools\n\n"
+            "Examples of commands you might already have:\n"
+            "- `/clean` or `/purge` → clean channels\n"
+            "- `/announce` or `/admin announce` → send announcements\n"
+            "- XP / role auto-assignment features\n\n"
+            "This section is informational so you can align tools with CEIL.\n"
+        )
+        embed = discord.Embed(
+            title="🛠️ Server Tools Overview",
+            description=desc,
+            color=discord.Color.dark_orange(),
+        )
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+class DashboardV3CloseButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            style=discord.ButtonStyle.danger,
+            label="Close",
+            emoji="❌",
+            row=2,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        if not await _ensure_admin(interaction):
+            return
+        await interaction.message.delete()
+@admin_group.command(
+    name="dashboard_v3",
+    description="Open the upgraded CEIL admin dashboard (V3).",
+)
+@app_commands.checks.has_permissions(administrator=True)
+async def admin_dashboard_v3_slash(interaction: discord.Interaction):
+    """Non-breaking V3 dashboard – uses a new view and embed."""
+    guild = interaction.guild
+    if guild is None:
+        return await interaction.response.send_message(
+            "❌ This command can only be used inside a server.",
+            ephemeral=True,
+        )
+
+    embed = build_dashboard_v3_embed(guild)
+    view = DashboardV3View()
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
     ###############################################################
 # COINS SLASH COMMANDS
 ###############################################################
