@@ -3391,22 +3391,25 @@ async def admin_dm_all_slash(
 # COINS SLASH COMMANDS
 ###############################################################
 
-@bot.tree.command(
-    name="coins",
-    description="Show your coin balance or another member's."
-)
-@app_commands.describe(member="Member to check (optional).")
+@tree.command(name="coins", description="Check your coins or someone else's coins.")
+@app_commands.describe(member="User to check (optional)")
 async def coins_slash(interaction: discord.Interaction, member: discord.Member | None = None):
     user = member or interaction.user
-    balance = get_coins(user.id)
-    own = (user.id == interaction.user.id)
 
-    if own:
-        text = f"💰 You have **{balance} coins**."
-    else:
-        text = f"💰 {user.mention} has **{balance} coins**."
+    # Ensure coin data exists
+    if str(user.id) not in coins_data:
+        coins_data[str(user.id)] = 0
 
-    await interaction.response.send_message(text, ephemeral=True)
+    amount = coins_data[str(user.id)]
+
+    embed = discord.Embed(
+        title="💰 Coin Balance",
+        description=f"**{user.display_name}** has **{amount}** coins.",
+        color=0xFFD700
+    )
+    embed.set_thumbnail(url=user.avatar.url if user.avatar else "")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 
 @bot.tree.command(
