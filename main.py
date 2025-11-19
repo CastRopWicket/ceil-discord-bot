@@ -2060,23 +2060,14 @@ async def observation_form_slash(
 # ============================================================
 
 async def call_ai_simple(prompt: str) -> str:
-    """
-    Wrapper around your bot's existing AI call.
-    Adjust ONLY the internal return line to match your actual AI function.
-    """
+    """Simple wrapper to call the bot's AI engine safely."""
     try:
-        # If your bot already uses ai_generate_response(), use this:
-        return await ai_generate_response(prompt)
-
-        # If your bot uses something else, replace the above line with the correct one.
-        # Examples:
-        # return await call_ai(prompt)
-        # return await ai_generate(prompt)
-        # return await ask_ai(prompt)
-
+        # Use your existing AI engine
+        response = await ai_generate_response("SYSTEM", prompt)
+        return response or "AI returned an empty response."
     except Exception as e:
-        print(f"[call_ai_simple] AI error: {e}")
-        return "⚠️ AI error — unable to generate response."
+        print(f"[call_ai_simple] AI error:", e)
+        return "⚠️ AI engine error. Check logs."
 
 # ===========================================
 # LOA / PD / TEACHER REPORT – V2 COMMANDS
