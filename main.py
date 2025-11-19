@@ -2079,225 +2079,204 @@ async def ai_generate(user, title: str, instruction: str):
         return f"❌ AI processing failed in **{title}**."
 
 
-# ===========================================
-# LOA / PD / TEACHER REPORT – V2 COMMANDS
-# ===========================================
+###############################################################
+# LOA+  — Learning-Oriented Assessment V2
+###############################################################
 
-teacher_group = app_commands.Group(
-    name="teacher",
-    description="Teacher tools (LOA, PD, reports) – V2",
-    guild_only=True,
-)
-
-
-def _teacher_is_allowed(member: discord.Member) -> bool:
-    # Reuse your existing staff logic if you want:
-    # return is_staff(member)
-    return member.guild_permissions.manage_guild or member.guild_permissions.administrator
-
-
-@teacher_group.command(
-    name="loa_plus",
-    description="Design a learning-oriented assessment task (V2).",
-)
-@app_commands.describe(
-    level="Student level (A1–C2 or custom)",
-    objective="Learning objective / outcome",
-    skills="Skills to target (e.g. listening, speaking, writing, reading)",
-    constraints="Context / constraints (time, tools, online/offline, etc.)",
-)
-async def loa_plus_slash(
-    interaction: discord.Interaction,
-    level: str,
-    objective: str,
-    skills: str,
-    constraints: str,
-):
-    user = interaction.user
-    if not isinstance(user, discord.Member) or not _teacher_is_allowed(user):
-        return await interaction.response.send_message(
-            "❌ This command is for teachers / coordinators only.",
-            ephemeral=True,
-        )
-
+async def loa_plus_generate(interaction, student_name, objective, evidence):
     prompt = f"""
-You are an expert in **learning-oriented assessment** (LOA) and teacher professional development.
+Create a Learning-Oriented Assessment (LOA+) report.
 
-Design a **single assessment task** that is:
-- clearly aligned with this level: {level}
-- targets these skills: {skills}
-- addresses this objective: {objective}
-- respects these constraints: {constraints}
+STUDENT: {student_name}
+LEARNING OBJECTIVE: {objective}
+OBSERVED EVIDENCE: {evidence}
 
-Output in **bullet format** with these sections:
-
-1. *Task overview* (short description)
-2. *Learning targets* (2–4 bullet points, very clear, learner-friendly)
-3. *In-class procedure* (step-by-step, teacher-facing)
-4. *Evidence of learning* (what the teacher observes / collects)
-5. *Feedback moves* (how teacher gives formative feedback)
-6. *Learner self-assessment* (simple prompts students can answer)
-7. *Differentiation* (at least 2 ideas for weaker/stronger learners)
+FORMAT REQUIRED:
+1. TARGET OUTCOME (CEFR linked)
+2. DIAGNOSTIC ANALYSIS (strengths + learning gaps)
+3. LEARNING EVIDENCE (clear indicators)
+4. NEXT ACTION STEPS (L1 → L2 → L3 scaffold)
+5. ASSESSMENT-FOR-LEARNING STRATEGIES (AfL)
+6. FEEDBACK TO LEARNER (simple + actionable)
+7. TEACHER NOTES (if needed)
 """
-
-    response_text = await call_ai_simple(prompt)  # reuse your existing AI call helper
-    embed = discord.Embed(
-        title="📌 LOA Task (V2)",
-        description=response_text[:4000],
-        color=discord.Color.green(),
-    )
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    return await ai_generate(interaction.user, "LOA+", prompt)
 
 
-@teacher_group.command(
-    name="pd_plus",
-    description="Create a short PD plan focused on a specific classroom issue.",
-)
-@app_commands.describe(
-    issue="Classroom issue or challenge (e.g. low participation, mixed levels)",
-    time="Available PD time (e.g. 30 min, 1h, 2h workshop)",
-    context="Context (e.g. university ESP, secondary school, online classes)",
-)
-async def pd_plus_slash(
-    interaction: discord.Interaction,
-    issue: str,
-    time: str,
-    context: str,
-):
-    user = interaction.user
-    if not isinstance(user, discord.Member) or not _teacher_is_allowed(user):
-        return await interaction.response.send_message(
-            "❌ This command is for teachers / coordinators only.",
-            ephemeral=True,
-        )
+@bot.tree.command(name="loa_plus", description="Generate a CEIL Learning-Oriented Assessment report (LOA+).")
+@app_commands.describe(student_name="Student name", objective="Learning objective", evidence="Observed evidence")
+async def loa_plus_slash(interaction, student_name: str, objective: str, evidence: str):
+    await interaction.response.defer(thinking=True)
+    result = await loa_plus_generate(interaction, student_name, objective, evidence)
+    await interaction.followup.send(result)
+###############################################################
+# PD+ — Teacher Professional Development Plan Generator
+###############################################################
 
+async def pd_plus_generate(interaction, teacher_name, area, evidence):
     prompt = f"""
-You are designing a **teacher professional development (PD) session**.
+Create a Teacher Professional Development (PD+) report.
 
-Context: {context}
-Time available: {time}
-Main issue: {issue}
+TEACHER: {teacher_name}
+AREA OF DEVELOPMENT: {area}
+EVIDENCE OF NEED: {evidence}
 
-Design a **practical PD plan** with these sections:
-
-1. *Goal of the session* (SMART formulation)
-2. *Warm-up / activation* (5–10 minutes)
-3. *Core input* (theory or examples)
-4. *Collaborative task* (teachers apply ideas to their own classes)
-5. *Action plan* (each teacher leaves with 1–2 concrete actions)
-6. *Follow-up / evidence* (how we know the PD had an impact)
+FORMAT REQUIRED:
+1. AREA DIAGNOSTIC (root cause analysis)
+2. PERFORMANCE INDICATORS (observable behavior)
+3. PROFESSIONAL GROWTH TARGETS (SMART)
+4. ACTION PLAN (1-week, 1-month, 3-month)
+5. REFLECTIVE TASKS
+6. COACHING INTERVENTIONS
+7. FOLLOW-UP EVALUATION METRICS
 """
-
-    response_text = await call_ai_simple(prompt)
-    embed = discord.Embed(
-        title="📚 PD Plan (V2)",
-        description=response_text[:4000],
-        color=discord.Color.blue(),
-    )
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    return await ai_generate(interaction.user, "PD+", prompt)
 
 
-@teacher_group.command(
-    name="report_plus",
-    description="Generate a structured observation / lesson report.",
-)
-@app_commands.describe(
-    lesson_focus="Focus of the observed lesson (e.g. speaking fluency)",
-    strengths="What went well (notes / bullet points)",
-    areas="Areas for development",
-)
-async def teacher_report_plus_slash(
-    interaction: discord.Interaction,
-    lesson_focus: str,
-    strengths: str,
-    areas: str,
-):
-    user = interaction.user
-    if not isinstance(user, discord.Member) or not _teacher_is_allowed(user):
-        return await interaction.response.send_message(
-            "❌ This command is for teachers / coordinators only.",
-            ephemeral=True,
-        )
+@bot.tree.command(name="pd_plus", description="Generate a teacher PD+ plan.")
+@app_commands.describe(teacher_name="Teacher name", area="Development area", evidence="Observation evidence")
+async def pd_plus_slash(interaction, teacher_name: str, area: str, evidence: str):
+    await interaction.response.defer(thinking=True)
+    result = await pd_plus_generate(interaction, teacher_name, area, evidence)
+    await interaction.followup.send(result)
+###############################################################
+# LESSON+ — Complete Lesson Plan Generator (V2)
+###############################################################
 
+async def lesson_plus_generate(interaction, level, topic, target):
     prompt = f"""
-You are writing a **professional, supportive lesson observation report**.
+Generate a complete CEIL-structured LESSON+ plan.
 
-Lesson focus: {lesson_focus}
-Observed strengths: {strengths}
-Areas for development: {areas}
+LEVEL: {level}
+TOPIC: {topic}
+TARGET OUTCOME: {target}
 
-Write the report with these sections:
-
-1. *Context & focus*
-2. *Evidence-based strengths* (with short concrete examples)
-3. *Areas for development* (linked to evidence, 2–3 key points)
-4. *Actionable next steps* (practical, time-bound)
-5. *Suggested support* (what the institution / coordinator can do)
+FORMAT REQUIRED:
+1. LEARNING OUTCOME (CEFR)
+2. WARM-UP (engaging)
+3. PRESENTATION STAGE (Clear explanation + examples)
+4. GUIDED PRACTICE
+5. INDEPENDENT PRACTICE
+6. COMMUNICATIVE TASK
+7. FEEDBACK STRATEGY (AfL)
+8. ASSESSMENT CHECKPOINTS
+9. HOMEWORK (CEFR-appropriate)
 """
-
-    response_text = await call_ai_simple(prompt)
-    embed = discord.Embed(
-        title="📝 Lesson Observation Report (V2)",
-        description=response_text[:4000],
-        color=discord.Color.purple(),
-    )
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    return await ai_generate(interaction.user, "LESSON+", prompt)
 
 
-@teacher_group.command(
-    name="coordination_plus",
-    description="Summarize a coordination meeting and actions.",
-)
-@app_commands.describe(
-    agenda="Main points discussed / agenda",
-    decisions="Key decisions taken",
-    tasks="Tasks assigned (who does what, by when)",
-)
-async def coordination_plus_slash(
-    interaction: discord.Interaction,
-    agenda: str,
-    decisions: str,
-    tasks: str,
-):
-    user = interaction.user
-    if not isinstance(user, discord.Member) or not _teacher_is_allowed(user):
-        return await interaction.response.send_message(
-            "❌ This command is for coordinators / admins only.",
-            ephemeral=True,
-        )
+@bot.tree.command(name="lesson_plus", description="Generate a CEIL Lesson+ plan.")
+@app_commands.describe(level="CEFR level", topic="Topic", target="Learning target")
+async def lesson_plus_slash(interaction, level: str, topic: str, target: str):
+    await interaction.response.defer(thinking=True)
+    result = await lesson_plus_generate(interaction, level, topic, target)
+    await interaction.followup.send(result)
+###############################################################
+# REPORT+ — Student Progress Report
+###############################################################
 
+async def report_plus_generate(interaction, student, strengths, weaknesses):
     prompt = f"""
-You are summarizing a **teachers' coordination meeting**.
+Create a CEFR-aligned student REPORT+.
 
-Agenda:
-{agenda}
+STUDENT: {student}
+STRENGTHS: {strengths}
+WEAKNESSES: {weaknesses}
 
-Decisions:
-{decisions}
-
-Tasks:
-{tasks}
-
-Produce a summary with:
-
-1. *Meeting overview* (date, context – leave date generic)
-2. *Key decisions* (clear bullet points)
-3. *Action table* (who / what / by when – as markdown bullet format)
-4. *Risks or open questions*
-5. *Next meeting focus* (proposal)
+FORMAT REQUIRED:
+1. CEFR POSITION (A1–C2 anchor)
+2. CAN-DO STATEMENTS
+3. STRENGTH PROFILE
+4. DEVELOPMENT AREAS
+5. RECOMMENDED LEARNING PATH
+6. TEACHER FEEDBACK MESSAGE
 """
-
-    response_text = await call_ai_simple(prompt)
-    embed = discord.Embed(
-        title="🤝 Coordination Summary (V2)",
-        description=response_text[:4000],
-        color=discord.Color.teal(),
-    )
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    return await ai_generate(interaction.user, "REPORT+", prompt)
 
 
-# Finally, register the group on the tree
-bot.tree.add_command(teacher_group)
+@bot.tree.command(name="report_plus", description="Generate a CEIL student progress report.")
+@app_commands.describe(student="Student name", strengths="Strengths", weaknesses="Weaknesses")
+async def report_plus_slash(interaction, student: str, strengths: str, weaknesses: str):
+    await interaction.response.defer(thinking=True)
+    result = await report_plus_generate(interaction, student, strengths, weaknesses)
+    await interaction.followup.send(result)
+###############################################################
+# RESEARCH+ — Academic Writing Assistant (Outline + Sections)
+###############################################################
+
+async def research_plus_generate(interaction, title, question):
+    prompt = f"""
+Create a RESEARCH+ academic output.
+
+TITLE: {title}
+RESEARCH QUESTION: {question}
+
+FORMAT REQUIRED:
+1. ABSTRACT
+2. THEORETICAL FRAMEWORK
+3. LITERATURE REVIEW SUMMARY
+4. METHODOLOGY OUTLINE
+5. ARGUMENT STRUCTURE
+6. EXPECTED FINDINGS
+7. REFERENCES (APA)
+"""
+    return await ai_generate(interaction.user, "RESEARCH+", prompt)
+
+
+@bot.tree.command(name="research_plus", description="Generate an academic Research+ output.")
+@app_commands.describe(title="Paper title", question="Research question")
+async def research_plus_slash(interaction, title: str, question: str):
+    await interaction.response.defer(thinking=True)
+    result = await research_plus_generate(interaction, title, question)
+    await interaction.followup.send(result)
+###############################################################
+# COORDINATION+ — Teacher + Admin Support
+###############################################################
+
+async def coordination_plus_generate(interaction, task):
+    prompt = f"""
+Generate a COORDINATION+ support output for this task:
+
+TASK: {task}
+
+FORMAT:
+1. TASK BREAKDOWN
+2. REQUIRED RESOURCES
+3. DEADLINE STRUCTURE
+4. CHECKPOINTS
+5. COMMUNICATION TEMPLATE
+6. RISK NOTES
+"""
+    return await ai_generate(interaction.user, "COORDINATION+", prompt)
+
+
+@bot.tree.command(name="coordination_plus", description="Generate coordination/admin support output.")
+@app_commands.describe(task="Describe the coordination/admin task")
+async def coordination_plus_slash(interaction, task: str):
+    await interaction.response.defer(thinking=True)
+    result = await coordination_plus_generate(interaction, task)
+    await interaction.followup.send(result)
+###############################################################
+# SERVER TOOLS+ — Moderation Utilities
+###############################################################
+
+@bot.tree.command(name="clean", description="Clear a number of messages.")
+@app_commands.describe(amount="Number of messages to delete")
+async def clean_slash(interaction, amount: int):
+    if not interaction.user.guild_permissions.manage_messages:
+        return await interaction.response.send_message("You need Manage Messages permission.", ephemeral=True)
+
+    await interaction.response.defer()
+    deleted = await interaction.channel.purge(limit=amount)
+    await interaction.followup.send(f"🧹 Deleted {len(deleted)} messages.", ephemeral=True)
+
+
+@bot.tree.command(name="autorole_set", description="Set an auto-role for new members.")
+@app_commands.describe(role="Role to assign",)
+async def autorole_set_slash(interaction, role: discord.Role):
+    config["auto_role_id"] = role.id
+    save_config()
+    await interaction.response.send_message(f"Auto-role set to: {role.mention}", ephemeral=True)
 
 
 ###############################################################
