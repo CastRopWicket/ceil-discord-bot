@@ -4020,67 +4020,56 @@ async def progress_report_slash(interaction: discord.Interaction):
         ephemeral=True,
     )
 ###############################################
-# DASHBOARD / CONTROL PANEL V3 (CLEAN VERSION)
+# DASHBOARD V3 — SELECT, VIEWS & SLASH COMMAND
 ###############################################
-
-def dashboard_embed(title: str, description: str, *, color: discord.Color | None = None) -> discord.Embed:
-    """Helper to build consistent admin dashboard embeds."""
-    embed = discord.Embed(
-        title=title,
-        description=description,
-        color=color or discord.Color.blurple(),
-    )
-    embed.set_footer(text="CEIL • Admin Dashboard V3")
-    return embed
-
-
-class AdminDashboardView(View):
-    """Simple view that only contains a 'Close' button, used for some pages."""
-    def __init__(self, timeout: float | None = 180):
-        super().__init__(timeout=timeout)
-        self.add_item(CloseDashboardButton())
-
 
 class DashboardSectionSelect(Select):
     def __init__(self):
         options = [
-            SelectOption(
-                label="General overview",
-                value="general",
-                description="Status, ping, uptime",
+            discord.SelectOption(
+                label="Overview",
+                description="Server stats & feature status",
+                value="overview",
                 emoji="📊",
             ),
-            SelectOption(
-                label="Teacher suite",
-                value="teacher",
-                description="AI teacher tools & PD",
-                emoji="📚",
-            ),
-            SelectOption(
-                label="Moderation",
-                value="mod",
-                description="Filters, slowmode, logs",
-                emoji="🛡️",
-            ),
-            SelectOption(
-                label="Games & XP",
-                value="games",
-                description="Blackjack, coins, XP engine",
-                emoji="🎮",
-            ),
-            SelectOption(
-                label="Google Center",
-                value="google",
-                description="Drive, Docs, YouTube",
-                emoji="🧩",
-            ),
-            SelectOption(
-                label="Server tools",
-                value="server",
-                description="Channels, roles, cleanup",
+            discord.SelectOption(
+                label="General settings",
+                description="Toggle AI, moderation, XP, fun, etc.",
+                value="general",
                 emoji="⚙️",
             ),
+            discord.SelectOption(
+                label="Teacher / LOA & PD",
+                description="Learning-oriented assessment & PD tools",
+                value="teacher",
+                emoji="🧑‍🏫",
+            ),
+            discord.SelectOption(
+                label="Moderation & safety",
+                description="Warnings, mutes, cleanup tools",
+                value="moderation",
+                emoji="🛡️",
+            ),
+            discord.SelectOption(
+                label="Games & XP",
+                description="Blackjack, coins, XP & leaderboards",
+                value="xp_games",
+                emoji="🎮",
+            ),
+            discord.SelectOption(
+                label="Google Center",
+                description="Drive / Docs / Calendar / YouTube",
+                value="google",
+                emoji="🧩",
+            ),
+            discord.SelectOption(
+                label="Server tools",
+                description="Channel cleaning, autoroles, utilities",
+                value="server",
+                emoji="🧰",
+            ),
         ]
+
         super().__init__(
             placeholder="Select dashboard section…",
             min_values=1,
@@ -4090,46 +4079,24 @@ class DashboardSectionSelect(Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        """Single correct signature – discord will call callback(interaction) only."""
-        # Basic admin guard
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "You need administrator permissions to use the dashboard.",
-                ephemeral=True,
-            )
+        """Handle section switching inside the dashboard view."""
+        if not await ensure_admin_interaction(interaction):
             return
 
+        value = self.values[0]
         guild = interaction.guild
-        if guild is None:
-            await interaction.response.send_message(
-                "This command can only be used in a server.",
-                ephemeral=True,
-            )
-            return
+        total_members = guild.member_count or 0
+        online_members = sum(
+            1 for m in guild.members if m.status != discord.Status.offline
+        )
 
-        # We assume you have a global `config` dict already loaded in your bot
-        global config  # type: ignore  # keep mypy / linters calm
-
-        section = self.values[0]
-
-        # ===== GENERAL OVERVIEW =====
-        if section == "general":
-            total_members = guild.member_count or 0
-            online_members = sum(
-                1 for m in guild.members if m.status != discord.Status.offline
-            )
-
-            text_channels = len([c for c in guild.channels if isinstance(c, discord.TextChannel)])
-            voice_channels = len([c for c in guild.channels if isinstance(c, discord.VoiceChannel)])
-
+        # === OVERVIEW SECTION ===
+        if value == "overview":
             desc = (
-                f"### 📊 Server overview: **{guild.name}**\n\n"
+                f"### 🛠️ CEIL ADMIN DASHBOARD V3\n\n"
                 f"**Members**\n"
                 f"- Total: **{total_members}**\n"
                 f"- Online: **{online_members}**\n\n"
-                f"**Channels**\n"
-                f"- Text: **{text_channels}**\n"
-                f"- Voice: **{voice_channels}**\n\n"
                 f"**Features**\n"
                 f"- AI: {'✅' if config.get('ai_enabled', True) else '❌'}\n"
                 f"- Moderation: {'✅' if config.get('moderation_enabled', True) else '❌'}\n"
@@ -4137,236 +4104,113 @@ class DashboardSectionSelect(Select):
                 f"- Fun: {'✅' if config.get('fun_enabled', True) else '❌'}\n"
                 f"- Lessons: {'✅' if config.get('lessons_enabled', True) else '❌'}\n"
                 f"- Research: {'✅' if config.get('research_enabled', True) else '❌'}\n"
-                f"- Images/Vision: {'✅' if config.get('images_enabled', True) else '❌'}\n"
+                f"- Images/Vision: {'✅' if config.get('images_enabled', True) else '❌'}\n\n"
+                "Use the dropdown above to navigate to:\n"
+                "- Teacher / LOA & PD\n"
+                "- Moderation & safety\n"
+                "- Games & XP\n"
+                "- Google Center\n"
+                "- Server tools"
             )
             embed = dashboard_embed("🛠️ CEIL ADMIN DASHBOARD V3", desc)
             await interaction.response.edit_message(embed=embed, view=DashboardMainView())
             return
 
-        # ===== TEACHER SUITE =====
-        if section == "teacher":
+        # === GENERAL SETTINGS SECTION ===
+        if value == "general":
             desc = (
-                "### 📚 Teacher & LOA / PD Suite\n\n"
-                "**LOA / Classroom commands**\n"
-                "- `/loa_task` – Create a learning-oriented task (with criteria)\n"
-                "- `/loa_rubric` – Generate or store an assessment rubric\n"
-                "- `/lesson_plan` – Build a lesson outline\n"
-                "- `/worksheet` – Generate practice activities\n"
-                "- `/quiz` – Create quizzes aligned with LOA tasks\n\n"
-                "**Teacher Professional Development**\n"
-                "- `/pd_plan` – Plan a PD pathway (goals, resources, timelines)\n"
-                "- `/pd_reflect` – Reflect on a lesson / observation\n"
-                "- `/pd_observation` – Structure peer/mentor observation notes\n\n"
-                "Use these to keep everything aligned with **learning-oriented assessment**: "
-                "tasks → feedback → evidence → reflection."
+                "### ⚙️ General Settings\n\n"
+                "Toggle core features on/off for this server.\n"
+                "Use the buttons below to enable/disable modules."
             )
-            embed = dashboard_embed("📚 Teacher / LOA / PD Center", desc, color=discord.Color.green())
+            embed = dashboard_embed("⚙️ General Settings", desc)
+            await interaction.response.edit_message(embed=embed, view=GeneralSettingsView())
+            return
+
+        # === TEACHER / LOA & PD ===
+        if value == "teacher":
+            desc = (
+                "### 🧑‍🏫 Teacher / LOA & PD Suite\n\n"
+                "- LOA task builder\n"
+                "- Lesson reports & feedback\n"
+                "- PD reflection helpers\n\n"
+                "Use the slash commands (`/loa_task`, `/pd_plan`, `/lesson_report`) "
+                "or teacher sub-panels (to be expanded)."
+            )
+            embed = dashboard_embed("🧑‍🏫 Teacher / LOA & PD", desc)
             await interaction.response.edit_message(embed=embed, view=DashboardMainView())
             return
 
-        # ===== MODERATION =====
-        if section == "mod":
+        # === MODERATION & SAFETY ===
+        if value == "moderation":
             desc = (
                 "### 🛡️ Moderation & Safety\n\n"
-                "**Core commands**\n"
-                "- `/warn` – Issue a warning (logged)\n"
-                "- `/mute`  – Temporarily mute a user\n"
-                "- `/timeout` – Apply Discord timeout\n"
-                "- `/clean` – Bulk delete messages in a channel\n\n"
-                "**Filters & automod**\n"
-                "- Banned words filter: enabled/disabled via feature toggles\n"
-                "- Links / spam detection\n"
-                "- Slowmode suggestions based on spam bursts\n\n"
-                "Use this section together with your **logs channel** to keep the server clean."
+                "- Warnings & mutes\n"
+                "- Slowmode suggestions\n"
+                "- Cleanup utilities\n\n"
+                "Use moderation commands like `/warn`, `/mute`, `/clean_channel`.\n"
+                "Dashboard-side interactive moderation (click to mute/kick) can be added next."
             )
-            embed = dashboard_embed("🛡️ Moderation Center", desc, color=discord.Color.red())
+            embed = dashboard_embed("🛡️ Moderation & Safety", desc)
             await interaction.response.edit_message(embed=embed, view=DashboardMainView())
             return
 
-        # ===== GAMES & XP =====
-        if section == "games":
+        # === GAMES & XP ===
+        if value == "xp_games":
             desc = (
-                "### 🎮 Games, Blackjack & Coins / XP\n\n"
-                "**Blackjack (coin-based)**\n"
-                "- `!blackjack` – Play a round using your coins\n"
-                "- Reactions: 👊 = *hit*, ✋ = *stand*, ❌ = *double*\n\n"
-                "**Coins / XP management**\n"
-                "- `/coins` – Check coins\n"
-                "- `/coins_set` – (Admin) set coins for a user\n"
-                "- `/admin_xp_add` – Add XP to a user\n"
-                "- `/admin_xp_remove` – Remove XP from a user\n"
-                "- `/xp` – Show XP + level profile\n"
-                "- `/leaderboard` – View top XP users\n\n"
-                "The **XP control panel** in the dashboard lets you adjust XP directly via modals."
+                "### 🎮 Games & XP\n\n"
+                "- Blackjack with coins\n"
+                "- XP engine & levels\n"
+                "- Daily rewards (`!daily` / `/daily`)\n\n"
+                "Use the blackjack reactions (👊 = hit, ✋ = stand, ❌ = double) "
+                "and manage XP/coins via the XP panel and XP slash commands."
             )
-            embed = dashboard_embed("🎮 Games & XP Center", desc, color=discord.Color.gold())
+            embed = dashboard_embed("🎮 Games & XP", desc)
             await interaction.response.edit_message(embed=embed, view=DashboardMainView())
             return
 
-        # ===== GOOGLE CENTER =====
-        if section == "google":
+        # === GOOGLE CENTER ===
+        if value == "google":
             desc = (
                 "### 🧩 Google Center\n\n"
-                "**Drive / Docs**\n"
-                "- `/gdrive_search` – Search files in a connected Drive\n"
-                "- `/gdoc_new` – Create a new Google Doc (lesson, rubric, report)\n\n"
-                "**YouTube**\n"
-                "- `/gyt_search` – Search for a YouTube video\n"
-                "- `/gyt_summary` – Summarize a YouTube video (if implemented)\n\n"
-                "Make sure your `GOOGLE_SERVICE_ACCOUNT_JSON` and `YOUTUBE_API_KEY` "
-                "environment variables are correctly set so these work reliably."
+                "- Drive search & file listing\n"
+                "- Docs/Sheets creation helpers\n"
+                "- Calendar events summary\n"
+                "- YouTube search (`/gyt_search`)\n\n"
+                "Make sure your Google credentials + API keys are set in env.\n"
+                "Current status: "
+                f\"{'✅ READY' if GOOGLE_READY else '⚠️ DISABLED (no creds)'}\"
             )
-            embed = dashboard_embed("🧩 Google Center", desc, color=discord.Color.teal())
+            embed = dashboard_embed("🧩 Google Center", desc)
             await interaction.response.edit_message(embed=embed, view=DashboardMainView())
             return
 
-        # ===== SERVER TOOLS =====
-        if section == "server":
+        # === SERVER TOOLS ===
+        if value == "server":
             desc = (
-                "### ⚙️ Server Management Tools\n\n"
-                "**Channel tools**\n"
-                "- `/clean` – Clear messages in this channel\n"
-                "- `/slowmode` – Suggest or set slowmode\n\n"
-                "**Roles / autoroles**\n"
-                "- `/autorole_panel` – Configure auto-role rules (if enabled)\n"
-                "- `/role_add` / `/role_remove` – Manage roles for a member\n\n"
-                "**Command builder (experimental)**\n"
-                "- `/cmd_builder` – Describe a simple pattern (trigger → reply) and the bot "
-                "stores it as a custom command (no code deploy needed).\n\n"
-                "Use this to adjust the server structure without touching the code."
+                "### 🧰 Server Tools\n\n"
+                "- Channel cleanup (`/clean_channel`)\n"
+                "- Autoroles (planned)\n"
+                "- Structure builder & announcements\n\n"
+                "Use the admin suite slash commands; dashboard controls can be added for:\n"
+                "- One-click cleanup presets\n"
+                "- Interactive autorole configuration"
             )
-            embed = dashboard_embed("⚙️ Server Tools", desc, color=discord.Color.dark_grey())
+            embed = dashboard_embed("🧰 Server Tools", desc)
             await interaction.response.edit_message(embed=embed, view=DashboardMainView())
             return
-
-        # Fallback – shouldn’t normally be hit
-        await interaction.response.send_message(
-            "Unknown dashboard section selected. Try again.",
-            ephemeral=True,
-        )
-
-
-class CloseDashboardButton(Button):
-    def __init__(self):
-        super().__init__(
-            label="Close",
-            style=discord.ButtonStyle.danger,
-            emoji="✖️",
-            row=2,
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "Only administrators can close the admin dashboard.",
-                ephemeral=True,
-            )
-            return
-
-        await interaction.message.delete()
 
 
 class DashboardMainView(View):
-    """Main dashboard view: section select + utility buttons."""
-    def __init__(self, timeout: float | None = 180):
-        super().__init__(timeout=timeout)
-        self.add_item(DashboardSectionSelect())
-        self.add_item(DashboardRefreshButton())
-        self.add_item(CloseDashboardButton())
-
-
-class DashboardRefreshButton(Button):
     def __init__(self):
-        super().__init__(
-            label="Refresh",
-            style=discord.ButtonStyle.secondary,
-            emoji="🔄",
-            row=1,
-        )
+        super().__init__(timeout=180)
+        self.add_item(DashboardSectionSelect())
+        # You can add quick-link buttons here if you want, e.g.:
+        # self.add_item(Button(label="Open Teacher Panel", style=discord.ButtonStyle.secondary))
 
-    async def callback(self, interaction: discord.Interaction):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "Only administrators can refresh the dashboard.",
-                ephemeral=True,
-            )
-            return
-
-        guild = interaction.guild
-        global config  # type: ignore
-
-        if guild is None:
-            await interaction.response.send_message(
-                "This command can only be used in a server.",
-                ephemeral=True,
-            )
-            return
-
-        total_members = guild.member_count or 0
-        online_members = sum(
-            1 for m in guild.members if m.status != discord.Status.offline
-        )
-
-        desc = (
-            f"### 🛠️ CEIL ADMIN DASHBOARD V3\n\n"
-            f"**Members**\n"
-            f"- Total: **{total_members}**\n"
-            f"- Online: **{online_members}**\n\n"
-            f"**Features**\n"
-            f"- AI: {'✅' if config.get('ai_enabled', True) else '❌'}\n"
-            f"- Moderation: {'✅' if config.get('moderation_enabled', True) else '❌'}\n"
-            f"- XP: {'✅' if config.get('xp_enabled', True) else '❌'}\n"
-            f"- Fun: {'✅' if config.get('fun_enabled', True) else '❌'}\n"
-            f"- Lessons: {'✅' if config.get('lessons_enabled', True) else '❌'}\n"
-            f"- Research: {'✅' if config.get('research_enabled', True) else '❌'}\n"
-            f"- Images/Vision: {'✅' if config.get('images_enabled', True) else '❌'}\n\n"
-            "Use the dropdown above to navigate to specific sections."
-        )
-        embed = dashboard_embed("🛠️ CEIL ADMIN DASHBOARD V3", desc)
-        await interaction.response.edit_message(embed=embed, view=DashboardMainView())
-
-
-@app_commands.checks.has_permissions(administrator=True)
-async def callback(self, interaction: discord.Interaction):
-        """Single correct signature – discord will call callback(interaction) only."""
-        # Basic admin guard
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                "You need administrator permissions to use the dashboard.",
-                ephemeral=True,
-            )
-            return
-    total_members = guild.member_count or 0
-    online_members = sum(
-        1 for m in guild.members if m.status != discord.Status.offline
-    )
-
-    desc = (
-        f"### 🛠️ CEIL ADMIN DASHBOARD V3\n\n"
-        f"**Members**\n"
-        f"- Total: **{total_members}**\n"
-        f"- Online: **{online_members}**\n\n"
-        f"**Features**\n"
-        f"- AI: {'✅' if config.get('ai_enabled', True) else '❌'}\n"
-        f"- Moderation: {'✅' if config.get('moderation_enabled', True) else '❌'}\n"
-        f"- XP: {'✅' if config.get('xp_enabled', True) else '❌'}\n"
-        f"- Fun: {'✅' if config.get('fun_enabled', True) else '❌'}\n"
-        f"- Lessons: {'✅' if config.get('lessons_enabled', True) else '❌'}\n"
-        f"- Research: {'✅' if config.get('research_enabled', True) else '❌'}\n"
-        f"- Images/Vision: {'✅' if config.get('images_enabled', True) else '❌'}\n\n"
-        "Use the dropdown above to navigate to:\n"
-        "- Teacher / LOA & PD\n"
-        "- Moderation & safety\n"
-        "- Games & XP\n"
-        "- Google Center\n"
-        "- Server tools"
-    )
-
-    embed = dashboard_embed("🛠️ CEIL ADMIN DASHBOARD V3", desc)
-    await interaction.response.send_message(embed=embed, view=DashboardMainView(), ephemeral=True)
 
 ###############################################
-# SECTION: GENERAL SETTINGS
+# SECTION: GENERAL SETTINGS (TOGGLES)
 ###############################################
 
 class GeneralSettingsView(View):
@@ -4399,46 +4243,66 @@ class ToggleFeatureButton(Button):
             return
 
         current = config.get(self.config_key, True)
-        new_val = not current
-        config[self.config_key] = new_val
+        new_value = not current
+        config[self.config_key] = new_value
         save_config()
 
-        # Update button label
-        self.label = f"{self.label_name}: {'✅' if new_val else '❌'}"
+        self.label = f"{self.label_name}: {'✅' if new_value else '❌'}"
 
-        # Rebuild description
-        desc = (
-            "Toggle major systems on/off and see core configuration.\n\n"
-            f"- AI Engine: {'✅' if config.get('ai_enabled', True) else '❌'}\n"
-            f"- Moderation: {'✅' if config.get('moderation_enabled', True) else '❌'}\n"
-            f"- XP System: {'✅' if config.get('xp_enabled', True) else '❌'}\n"
-            f"- Fun / Games: {'✅' if config.get('fun_enabled', True) else '❌'}\n"
-            f"- Lessons / Teacher Suite: {'✅' if config.get('lessons_enabled', True) else '❌'}\n"
-            f"- Research Suite: {'✅' if config.get('research_enabled', True) else '❌'}\n"
-            f"- Vision / Images: {'✅' if config.get('images_enabled', True) else '❌'}\n"
-            f"- Logging: {'✅' if config.get('logging_enabled', True) else '❌'}\n"
+        await interaction.response.edit_message(
+            content="",
+            embed=interaction.message.embeds[0],
+            view=self.view,
         )
-        embed = dashboard_embed("⚙️ General Settings", desc, color=discord.Color.gold())
-        await interaction.response.edit_message(embed=embed, view=self.view)
 
 
-class BackToMainButton(Button):
-    def __init__(self, row: int = 2):
-        super().__init__(style=discord.ButtonStyle.secondary, label="⬅ Back to main", row=row)
+###############################################
+# /dashboard SLASH COMMAND (ENTRY POINT)
+###############################################
 
-    async def callback(self, interaction: discord.Interaction):
-        if not await ensure_admin_interaction(interaction):
-            return
-
-        desc = (
-            "Select a section from the dropdown to manage the bot.\n\n"
-            f"- AI: {'✅' if config.get('ai_enabled', True) else '❌'}\n"
-            f"- Moderation: {'✅' if config.get('moderation_enabled', True) else '❌'}\n"
-            f"- XP: {'✅' if config.get('xp_enabled', True) else '❌'}\n"
-            f"- Fun: {'✅' if config.get('fun_enabled', True) else '❌'}\n"
+@tree.command(name="dashboard", description="Open the CEIL admin dashboard (V3).")
+@app_commands.checks.has_permissions(administrator=True)
+async def dashboard_slash(interaction: discord.Interaction):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message(
+            "You need administrator permissions to use the dashboard.",
+            ephemeral=True,
         )
-        embed = dashboard_embed("🛠️ CEIL ADMIN DASHBOARD V3", desc)
-        await interaction.response.edit_message(embed=embed, view=DashboardMainView())
+        return
+
+    guild = interaction.guild
+    total_members = guild.member_count or 0
+    online_members = sum(
+        1 for m in guild.members if m.status != discord.Status.offline
+    )
+
+    desc = (
+        f"### 🛠️ CEIL ADMIN DASHBOARD V3\n\n"
+        f"**Members**\n"
+        f"- Total: **{total_members}**\n"
+        f"- Online: **{online_members}**\n\n"
+        f"**Features**\n"
+        f"- AI: {'✅' if config.get('ai_enabled', True) else '❌'}\n"
+        f"- Moderation: {'✅' if config.get('moderation_enabled', True) else '❌'}\n"
+        f"- XP: {'✅' if config.get('xp_enabled', True) else '❌'}\n"
+        f"- Fun: {'✅' if config.get('fun_enabled', True) else '❌'}\n"
+        f"- Lessons: {'✅' if config.get('lessons_enabled', True) else '❌'}\n"
+        f"- Research: {'✅' if config.get('research_enabled', True) else '❌'}\n"
+        f"- Images/Vision: {'✅' if config.get('images_enabled', True) else '❌'}\n\n"
+        "Use the dropdown above to navigate to:\n"
+        "- Teacher / LOA & PD\n"
+        "- Moderation & safety\n"
+        "- Games & XP\n"
+        "- Google Center\n"
+        "- Server tools"
+    )
+
+    embed = dashboard_embed("🛠️ CEIL ADMIN DASHBOARD V3", desc)
+    await interaction.response.send_message(
+        embed=embed,
+        view=DashboardMainView(),
+        ephemeral=True,
+    )
 
 
 ###############################################
