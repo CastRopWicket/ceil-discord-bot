@@ -25,6 +25,25 @@ from openai import OpenAI
 from discord.ui import View, Button, Select
 from discord import SelectOption
 
+###############################################################
+# OPENAI CLIENT INITIALIZATION (FIX FOR AI V2 COMMANDS)
+###############################################################
+try:
+    from openai import OpenAI
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+    if not OPENAI_API_KEY:
+        print("⚠️ No OPENAI_API_KEY environment variable found.")
+        client = None
+    else:
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        print("✅ OpenAI client initialized.")
+
+except Exception as e:
+    print(f"❌ Failed to initialize OpenAI: {e}")
+    client = None
+
+
 # =============== GOOGLE CENTER BASE CONFIG ==================
 
 import base64
@@ -2082,24 +2101,29 @@ async def ai_generate(user, title: str, instruction: str):
 # GLOBAL AI HELPER FOR ALL V2 MODULES (LOA, PD, REPORT...)
 ###########################################################
 
-async def ai_generate_response(system_msg: str = None, user_msg: str = None):
-    """Unified AI generator used by LOA+, PD+, REPORT+ etc."""
-    prompt = ""
+###############################################################
+# UNIVERSAL AI CALL — CLEAN + SAFE
+###############################################################
 
-    if system_msg:
-        prompt += f"System:\n{system_msg}\n\n"
-    if user_msg:
-        prompt += f"User:\n{user_msg}\n"
-
-    if not prompt.strip():
-        return "AI Error: empty prompt received."
+async def ai_generate_response(prompt: str) -> str:
+    """Central AI call used by LOA+, PD+, REPORT+."""
+    if client is None:
+        return "[AI V2 ERROR] OpenAI client not initialized."
 
     try:
-        response = await call_ai_simple(prompt)
-        return response
-    except Exception as e:
-        return f"[AI V2 ERROR] AI failure: {e}"
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are an expert educational AI producing structured, accurate content."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=1500,
+            temperature=0.4
+        )
+        return resp.choices[0].message.content
 
+    except Exception as e:
+        return f"[AI V2 ERROR] {type(e).__name__}: {e}"
 
 ###############################################################
 # UNIVERSAL AI CALL — CLEAN + SAFE
