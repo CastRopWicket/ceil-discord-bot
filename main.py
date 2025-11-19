@@ -2100,36 +2100,66 @@ async def ai_generate_response(system_msg: str = None, user_msg: str = None):
     except Exception as e:
         return f"[AI V2 ERROR] AI failure: {e}"
 
-###############################################################
-# LOA+  — Learning-Oriented Assessment V2
-###############################################################
+###############################################
+# LOA+ (Advanced Learning-Oriented Assessment)
+###############################################
 
-async def loa_plus_generate(interaction, student_name, objective, evidence):
-    prompt = f"""
-Create a Learning-Oriented Assessment (LOA+) report.
+@tree.command(name="loa_plus", description="Generate a full Learning-Oriented Assessment package (V2).")
+@app_commands.describe(
+    level="Student level (A1–C2)",
+    skill="Skill to assess (reading, listening, speaking, writing, grammar, vocabulary)",
+    topic="Topic or lesson theme"
+)
+async def loa_plus_slash(
+    interaction: discord.Interaction,
+    level: str,
+    skill: str,
+    topic: str
+):
 
-STUDENT: {student_name}
-LEARNING OBJECTIVE: {objective}
-OBSERVED EVIDENCE: {evidence}
+    await interaction.response.defer(ephemeral=True)
 
-FORMAT REQUIRED:
-1. TARGET OUTCOME (CEFR linked)
-2. DIAGNOSTIC ANALYSIS (strengths + learning gaps)
-3. LEARNING EVIDENCE (clear indicators)
-4. NEXT ACTION STEPS (L1 → L2 → L3 scaffold)
-5. ASSESSMENT-FOR-LEARNING STRATEGIES (AfL)
-6. FEEDBACK TO LEARNER (simple + actionable)
-7. TEACHER NOTES (if needed)
-"""
-    return await ai_generate(interaction.user, "LOA+", prompt)
+    # ----- SYSTEM MESSAGE -----
+    system_message = (
+        "You are an educational assessment expert. Generate a Learning-Oriented Assessment package "
+        "that is diagnostic, constructive, scaffolded, and action-driven. Include clear success criteria, "
+        "formative tasks, summative task, feedback logic, example answers, and action points for improvement."
+    )
 
+    # ----- USER MESSAGE -----
+    user_message = (
+        f"Generate an LOA package.\n"
+        f"Level: {level}\n"
+        f"Skill: {skill}\n"
+        f"Topic: {topic}\n\n"
+        f"Deliverables:\n"
+        f"- Learning outcomes\n"
+        f"- Success criteria\n"
+        f"- Formative assessment tasks\n"
+        f"- Summative assessment task\n"
+        f"- Scoring rubric\n"
+        f"- Feedback model\n"
+        f"- Improvement roadmap\n"
+    )
 
-@bot.tree.command(name="loa_plus", description="Generate a CEIL Learning-Oriented Assessment report (LOA+).")
-@app_commands.describe(student_name="Student name", objective="Learning objective", evidence="Observed evidence")
-async def loa_plus_slash(interaction, student_name: str, objective: str, evidence: str):
-    await interaction.response.defer(thinking=True)
-    result = await loa_plus_generate(interaction, student_name, objective, evidence)
-    await interaction.followup.send(result)
+    # ----- CALL AI -----
+    try:
+        response_text = await ai_generate_response(
+            system_msg=system_message,
+            user_msg=user_message
+        )
+    except Exception as e:
+        response_text = f"[AI V2 ERROR] LOA+: {e}"
+
+    # ----- SEND RESULT -----
+    embed = discord.Embed(
+        title="📘 LOA+ Package (V2)",
+        description=response_text[:3900],
+        color=discord.Color.blue(),
+    )
+
+    await interaction.followup.send(embed=embed, ephemeral=True)
+
 ###############################################################
 # PD+ — Teacher Professional Development Plan Generator
 ###############################################################
