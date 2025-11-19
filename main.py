@@ -4179,7 +4179,7 @@ class DashboardSectionSelect(Select):
                 "- YouTube search (`/gyt_search`)\n\n"
                 "Make sure your Google credentials + API keys are set in env.\n"
                 "Current status: "
-                f"'✅ READY' if GOOGLE_READY else '⚠️ DISABLED (no creds)'"
+                f"{'✅ READY' if GOOGLE_READY else '⚠️ DISABLED (no creds)'}"
             )
             embed = dashboard_embed("🧩 Google Center", desc)
             await interaction.response.edit_message(embed=embed, view=DashboardMainView())
