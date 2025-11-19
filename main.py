@@ -2054,6 +2054,30 @@ async def observation_form_slash(
     text = await teacher_llm(prompt)
     await interaction.followup.send(text)
 
+# ============================================================
+# SAFE WRAPPER: call_ai_simple()
+# Makes new V2 commands use your existing AI engine.
+# ============================================================
+
+async def call_ai_simple(prompt: str) -> str:
+    """
+    Wrapper around your bot's existing AI call.
+    Adjust ONLY the internal return line to match your actual AI function.
+    """
+    try:
+        # If your bot already uses generate_ai_response(), use this:
+        return await generate_ai_response(prompt)
+
+        # If your bot uses something else, replace the above line with the correct one.
+        # Examples:
+        # return await call_ai(prompt)
+        # return await ai_generate(prompt)
+        # return await ask_ai(prompt)
+
+    except Exception as e:
+        print(f"[call_ai_simple] AI error: {e}")
+        return "⚠️ AI error — unable to generate response."
+
 # ===========================================
 # LOA / PD / TEACHER REPORT – V2 COMMANDS
 # ===========================================
