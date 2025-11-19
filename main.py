@@ -1979,7 +1979,7 @@ async def loa_report_slash(
     focus="Grammar/vocabulary/skill focus (e.g. past simple vs present perfect, listening to lectures)",
     profile="Short profile of the learner(s): age, strengths, weaknesses"
 )
-def tutor_slash(
+async def tutor_slash(
     interaction: discord.Interaction,
     level: str,
     focus: str,
