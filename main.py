@@ -1970,10 +1970,7 @@ async def loa_report_slash(
 # AI TUTOR MODE — LEARNER-ORIENTED MINI LESSONS
 ###############################################################
 
-@bot.tree.command(
-    name="tutor",
-    description="AI tutor: generate a mini lesson and practice plan for a student."
-)
+@bot.tree.command(name="tutor",description="AI tutor: generate a mini lesson and practice plan for a student.")
 @app_commands.describe(
     level="Learner level (A1–C2 / N1–N8)",
     focus="Grammar/vocabulary/skill focus (e.g. past simple vs present perfect, listening to lectures)",
@@ -3391,24 +3388,23 @@ async def admin_dm_all_slash(
 # COINS SLASH COMMANDS
 ###############################################################
 
-@bot.tree.command(name="coins", description="Check your coins or someone else's coins.")
+@bot.tree.command(name="coins", description="Check or view coins")
 @app_commands.describe(member="User to check (optional)")
+@app_commands.checks.has_permissions(administrator=False)
 async def coins_slash(interaction: discord.Interaction, member: discord.Member | None = None):
+    """Coins slash command — async and valid."""
     user = member or interaction.user
 
-    # Ensure coin data exists
-    if str(user.id) not in coins_data:
-        coins_data[str(user.id)] = 0
-
-    amount = coins_data[str(user.id)]
+    coins = get_user_coins(user.id)
 
     embed = discord.Embed(
-        title="💰 Coin Balance",
-        description=f"**{user.display_name}** has **{amount}** coins.",
-        color=0xFFD700
+        title="💰 Coins",
+        description=f"**{user.display_name}** has **{coins} coins**.",
+        color=discord.Color.gold(),
     )
-    embed.set_thumbnail(url=user.avatar.url if user.avatar else "")
+
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 @bot.tree.command(
     name="coins_daily",
