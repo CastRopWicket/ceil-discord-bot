@@ -2165,93 +2165,79 @@ async def ai_v2_generate(system_msg: str, user_msg: str) -> str:
         return f"[AI V2 ERROR] {e}"
 
 
-###############################################################
-# LOA+  — Learning Oriented Assessment Generator (UPGRADED)
-###############################################################
-@bot.tree.command(name="loa_plus", description="Generate a full LOA package (criteria + tasks + progression).")
+# ==============================================
+# LOA+ V2 — Learning Oriented Assessment Upgrade
+# ==============================================
+@bot.tree.command(name="loa_plus", description="Generate advanced LOA-based formative assessment (V2).")
 async def loa_plus_slash(interaction: discord.Interaction, topic: str):
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer(thinking=True)
 
-    prompt = f"""
-Generate a **complete Learning-Oriented Assessment (LOA) package** for the topic: {topic}
+    system_msg = (
+        "You are CEIL LOA V2. You generate advanced, teacher-ready Learning-Oriented "
+        "Assessment outputs. Your structure ALWAYS follows:\n\n"
+        "1. Learning Outcomes (SMART + CEFR alignment)\n"
+        "2. Diagnostics (What students likely know / don't know)\n"
+        "3. Formative Tasks (scaffolded, communicative)\n"
+        "4. Assessment Criteria (success indicators)\n"
+        "5. Teacher Guidance (feedback strategies, differentiation)\n"
+        "6. Extension tasks\n"
+        "Tone: extremely professional, concise, teacher-credible."
+    )
 
-Follow CEIL LOA+ v2 standards:
+    user_msg = f"Create a full LOA plan for: {topic}"
 
-1. **Learning Outcomes**  
-2. **Success Criteria**  
-3. **Formative Assessment Tasks**  
-4. **Student Self-Assessment Prompts**  
-5. **Teacher Feedback Frames**  
-6. **Progression Tracking Indicators (Beginner–Developing–Competent–Proficient)**  
-7. **Mistake-Typology & Corrective Strategy Table**
-
-Produce clear markdown formatting.
-"""
-
-    response = await ai_generate_response(prompt)
-    await interaction.followup.send(response, ephemeral=True)
+    response = await ai_v2_generate(system_msg, user_msg)
+    await interaction.followup.send(response)
 
 
-###############################################################
-# PD+  — Professional Development Generator (UPGRADED)
-###############################################################
-@bot.tree.command(name="pd_plus", description="Generate a full professional development enhancement plan.")
-async def pd_plus_slash(interaction: discord.Interaction, teacher_need: str):
-    await interaction.response.defer(ephemeral=True)
+# ==============================================
+# PD+ V2 — Teacher Professional Development
+# ==============================================
+@bot.tree.command(name="pd_plus", description="Generate advanced PD (teacher professional development) plan (V2).")
+async def pd_plus_slash(interaction: discord.Interaction, focus: str):
+    await interaction.response.defer(thinking=True)
 
-    prompt = f"""
-Generate a **Professional Development (PD+) Action Plan** for the following teacher need:
+    system_msg = (
+        "You are CEIL PD+ V2. You generate top-tier teacher professional development guidance.\n"
+        "Your output ALWAYS includes:\n"
+        "1. Diagnostic: teacher current profile\n"
+        "2. PD Focus explained\n"
+        "3. Research-based strategies\n"
+        "4. Classroom applications\n"
+        "5. Evidence-based reflection questions\n"
+        "6. Implementation roadmap (1 week, 1 month, 3 months)\n"
+        "7. Risks + mitigation\n"
+        "Tone: academic, credible, grounded in TESOL + applied linguistics."
+    )
 
-**{teacher_need}**
+    user_msg = f"Create a full PD plan for: {focus}"
 
-Follow CEIL PD+ v2 framework:
+    response = await ai_v2_generate(system_msg, user_msg)
+    await interaction.followup.send(response)
 
-1. **Need Diagnosis**
-2. **PD Goal (SMART Format)**
-3. **Skill Gaps & Evidence**
-4. **Recommended Actions**
-5. **Classroom Application Tasks**
-6. **Reflection Questions**
-7. **Observation Checklist for Supervisors**
-8. **Self-Monitoring Sheet**
+# ==============================================
+# REPORT+ V2 — Academic/Teaching/Research Reports
+# ==============================================
+@bot.tree.command(name="report_plus", description="Generate a structured professional report (V2).")
+async def report_plus_slash(interaction: discord.Interaction, subject: str):
+    await interaction.response.defer(thinking=True)
 
-Produce detailed, structured output in markdown.
-"""
+    system_msg = (
+        "You are CEIL REPORT+ V2. You generate extremely clear, professional reports.\n"
+        "Your structure ALWAYS includes:\n"
+        "1. Executive Summary (4–6 lines)\n"
+        "2. Key Findings (bulleted)\n"
+        "3. Core Analysis (well-structured)\n"
+        "4. Implications\n"
+        "5. Recommendations\n"
+        "6. Conclusion\n"
+        "Tone: formal, academic, concise."
+    )
 
-    response = await ai_generate_response(prompt)
-    await interaction.followup.send(response, ephemeral=True)
+    user_msg = f"Generate a full REPORT+ on: {subject}"
 
-
-###############################################################
-# REPORT+ — Upgraded Student Report Generator (UPGRADED)
-###############################################################
-@bot.tree.command(name="report_plus", description="Generate a complete performance report.")
-async def report_plus_slash(interaction: discord.Interaction, student_name: str, skill: str):
-    await interaction.response.defer(ephemeral=True)
-
-    prompt = f"""
-Generate a **Complete Student Performance Report (REPORT+ V2)**
-
-Student: **{student_name}**  
-Skill Area: **{skill}**
-
-Report must include:
-
-1. **Performance Summary**
-2. **Strengths (Skill-Based)**
-3. **Gaps & Causes**
-4. **Evidence-Based Observations**
-5. **Actionable Recommendations**
-6. **Next-Step Learning Tasks**
-7. **Progression Band (A1–C2 or Beginner–Proficient)**
-
-Make it formal, professional, and formatted in markdown.
-"""
-
-    response = await ai_generate_response(prompt)
-    await interaction.followup.send(response, ephemeral=True)
-
-
+    response = await ai_v2_generate(system_msg, user_msg)
+    await interaction.followup.send(response)
 
 ###############################################################
 # LEARNING-ORIENTED ASSESSMENT (LOA) COMMANDS
@@ -4040,7 +4026,23 @@ async def admin_dashboard_v3_slash(interaction: discord.Interaction):
     view = DashboardV3View()
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-    ###############################################################
+elif selected == "teacher":
+    embed = dashboard_embed(
+        "📘 Teacher Suite (V2)",
+        "Tools available:\n"
+        "- **/loa_plus** — Learning-Oriented Assessment (V2)\n"
+        "- **/pd_plus** — Teacher Professional Development (V2)\n"
+        "- **/report_plus** — Professional academic reports (V2)"
+    )
+    await interaction.response.edit_message(embed=embed, view=TeacherSuiteView())
+
+class TeacherSuiteView(View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(BackToMainButton())
+
+
+###############################################################
 # COINS SLASH COMMANDS
 ###############################################################
 
