@@ -2137,115 +2137,111 @@ def init_openai():
 # run initialization now
 init_openai()
 
-# ==========================================
-# AI V2 UNIVERSAL HELPER (LOA+, PD+, REPORT+)
-# ==========================================
-async def ai_v2_generate(system_msg: str, user_msg: str) -> str:
-    global client
+# ============================
+# AI V2 — Unified Response Helper
+# ============================
 
-    if client is None:
-        return "[AI V2 ERROR] OpenAI client not initialized."
+async def ai_v2(prompt: str, system: str = "general") -> str:
+    if client_oai is None:
+        return "⚠️ OpenAI client not initialized."
+
+    # Build system message
+    sys_msg = ""
+    if system == "loa":
+        sys_msg = (
+            "You are an expert in Learning-Oriented Assessment (LOA). "
+            "You provide formative assessment, feedback, micro-tasks, and step-by-step learning guidance."
+        )
+    elif system == "pd":
+        sys_msg = (
+            "You are an expert in teacher professional development. "
+            "You support reflective practice, teaching improvement, and workshop planning."
+        )
+    elif system == "report":
+        sys_msg = (
+            "You generate professional educational reports with structured, clear, concise academic tone."
+        )
+    else:
+        sys_msg = "You are a helpful multilingual educational AI."
 
     try:
-        response = client.chat.completions.create(
+        response = client_oai.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": user_msg},
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": prompt}
             ],
-            temperature=0.4
+            max_tokens=800
         )
         return response.choices[0].message["content"]
-
     except Exception as e:
-        print(f"[AI V2 ERROR] {e}")
-        return f"[AI V2 ERROR] {e}"
+        print("[AI V2 ERROR]", e)
+        return f"⚠️ AI error: {e}"
 
-###############################################################
-# LOA+  — Learning Oriented Assessment Generator (UPGRADED)
-###############################################################
-@bot.tree.command(name="loa_plus", description="Generate a full LOA package (criteria + tasks + progression).")
-async def loa_plus_slash(interaction: discord.Interaction, topic: str):
-    await interaction.response.defer(ephemeral=True)
+@bot.tree.command(name="loa_plus", description="Advanced LOA generator with formative assessment.")
+@app_commands.describe(
+    topic="Topic or skill (e.g., writing sentences, conditionals, reading skills).",
+    level="Learner level (A1–C2)"
+)
+async def loa_plus_slash(interaction: discord.Interaction, topic: str, level: str = "B1"):
+    await interaction.response.defer(thinking=True)
 
-    prompt = f"""
-Generate a **complete Learning-Oriented Assessment (LOA) package** for the topic: {topic}
+    prompt = (
+        f"Learning-Oriented Assessment task required.\n"
+        f"Topic: {topic}\nLevel: {level}\n\n"
+        "Generate:\n"
+        "• A diagnostic check\n"
+        "• Immediate formative feedback\n"
+        "• A micro-task (1–3 minutes)\n"
+        "• Success criteria the learner should meet\n"
+        "• One follow-up task"
+    )
 
-Follow CEIL LOA+ v2 standards:
+    response = await ai_v2(prompt, system="loa")
+    await interaction.followup.send(response)
 
-1. **Learning Outcomes**  
-2. **Success Criteria**  
-3. **Formative Assessment Tasks**  
-4. **Student Self-Assessment Prompts**  
-5. **Teacher Feedback Frames**  
-6. **Progression Tracking Indicators (Beginner–Developing–Competent–Proficient)**  
-7. **Mistake-Typology & Corrective Strategy Table**
+@bot.tree.command(name="pd_plus", description="Generate teacher professional development content.")
+@app_commands.describe(
+    focus="Area of PD (classroom management, assessment, lesson planning, etc.)"
+)
+async def pd_plus_slash(interaction: discord.Interaction, focus: str):
+    await interaction.response.defer(thinking=True)
 
-Produce clear markdown formatting.
-"""
+    prompt = (
+        f"Teacher Professional Development content needed.\nFocus: {focus}\n\n"
+        "Generate:\n"
+        "• A reflective question\n"
+        "• A mini PD reading (5–8 lines)\n"
+        "• 2 strategies the teacher can apply tomorrow\n"
+        "• A short follow-up action plan"
+    )
 
-    response = await ai_generate_response(prompt)
-    await interaction.followup.send(response, ephemeral=True)
-
-
-###############################################################
-# PD+  — Professional Development Generator (UPGRADED)
-###############################################################
-@bot.tree.command(name="pd_plus", description="Generate a full professional development enhancement plan.")
-async def pd_plus_slash(interaction: discord.Interaction, teacher_need: str):
-    await interaction.response.defer(ephemeral=True)
-
-    prompt = f"""
-Generate a **Professional Development (PD+) Action Plan** for the following teacher need:
-
-**{teacher_need}**
-
-Follow CEIL PD+ v2 framework:
-
-1. **Need Diagnosis**
-2. **PD Goal (SMART Format)**
-3. **Skill Gaps & Evidence**
-4. **Recommended Actions**
-5. **Classroom Application Tasks**
-6. **Reflection Questions**
-7. **Observation Checklist for Supervisors**
-8. **Self-Monitoring Sheet**
-
-Produce detailed, structured output in markdown.
-"""
-
-    response = await ai_generate_response(prompt)
-    await interaction.followup.send(response, ephemeral=True)
+    response = await ai_v2(prompt, system="pd")
+    await interaction.followup.send(response)
 
 
-###############################################################
-# REPORT+ — Upgraded Student Report Generator (UPGRADED)
-###############################################################
-@bot.tree.command(name="report_plus", description="Generate a complete performance report.")
-async def report_plus_slash(interaction: discord.Interaction, student_name: str, skill: str):
-    await interaction.response.defer(ephemeral=True)
+@bot.tree.command(name="report_plus", description="Generate professional educational reports.")
+@app_commands.describe(
+    student="Student name",
+    issue="The incident, performance issue, progress, or behavior to report."
+)
+async def report_plus_slash(interaction: discord.Interaction, student: str, issue: str):
+    await interaction.response.defer(thinking=True)
 
-    prompt = f"""
-Generate a **Complete Student Performance Report (REPORT+ V2)**
+    prompt = (
+        f"Write a concise educational report.\n"
+        f"Student: {student}\n"
+        f"Issue: {issue}\n\n"
+        "Include:\n"
+        "• Summary of the situation\n"
+        "• Analysis (objective, evidence-based)\n"
+        "• Actions taken\n"
+        "• Recommendations\n"
+        "• Follow-up plan"
+    )
 
-Student: **{student_name}**  
-Skill Area: **{skill}**
-
-Report must include:
-
-1. **Performance Summary**
-2. **Strengths (Skill-Based)**
-3. **Gaps & Causes**
-4. **Evidence-Based Observations**
-5. **Actionable Recommendations**
-6. **Next-Step Learning Tasks**
-7. **Progression Band (A1–C2 or Beginner–Proficient)**
-
-Make it formal, professional, and formatted in markdown.
-"""
-
-    response = await ai_generate_response(prompt)
-    await interaction.followup.send(response, ephemeral=True)
+    response = await ai_v2(prompt, system="report")
+    await interaction.followup.send(response)
 
 ###############################################################
 # AI TUTOR MODE — LEARNER-ORIENTED MINI LESSONS
