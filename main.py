@@ -24,10 +24,6 @@ from discord import app_commands
 from openai import OpenAI
 from discord.ui import View, Button, Select
 from discord import SelectOption
-
-###############################################################
-# OPENAI CLIENT INITIALIZATION (FIX FOR AI V2 COMMANDS)
-###############################################################
 try:
     from openai import OpenAI
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
