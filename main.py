@@ -2141,42 +2141,55 @@ init_openai()
 # AI V2 — Unified Response Helper
 # ============================
 
-async def ai_v2(prompt: str, system: str = "general") -> str:
-    if client_oai is None:
-        return "⚠️ OpenAI client not initialized."
-
-    # Build system message
-    sys_msg = ""
-    if system == "loa":
-        sys_msg = (
-            "You are an expert in Learning-Oriented Assessment (LOA). "
-            "You provide formative assessment, feedback, micro-tasks, and step-by-step learning guidance."
-        )
-    elif system == "pd":
-        sys_msg = (
-            "You are an expert in teacher professional development. "
-            "You support reflective practice, teaching improvement, and workshop planning."
-        )
-    elif system == "report":
-        sys_msg = (
-            "You generate professional educational reports with structured, clear, concise academic tone."
-        )
-    else:
-        sys_msg = "You are a helpful multilingual educational AI."
+async def ai_v2_generate(system_prompt: str, user_prompt: str, model: str = "gpt-4.1-mini") -> str:
+    """
+    Unified helper for LOA+, PD+, REPORT+ with universal output extraction.
+    Works with all OpenAI Responses API formats without raising subscript errors.
+    """
+    if openai_client is None:
+        return "⚠️ AI engine not initialized."
 
     try:
-        response = client_oai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": sys_msg},
-                {"role": "user", "content": prompt}
+        resp = openai_client.responses.create(
+            model=model,
+            reasoning={"effort": "medium"},
+            max_output_tokens=1400,
+            temperature=0.4,
+            top_p=0.9,
+            input=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
-            max_tokens=800
         )
-        return response.choices[0].message["content"]
+
+        # ---------- UNIVERSAL EXTRACTION ----------
+        # 1) If the SDK provided flat output_text (most common)
+        if hasattr(resp, "output_text") and resp.output_text:
+            return resp.output_text.strip()
+
+        # 2) Try to parse resp.output safely
+        if hasattr(resp, "output") and resp.output:
+            out = resp.output
+
+            # Formats:
+            #   output = [ { "content": [ { "type": "output_text", "text": "..."} ] } ]
+            try:
+                content = out[0].content
+                for item in content:
+                    if hasattr(item, "text"):
+                        return item.text.strip()
+                    if isinstance(item, dict) and "text" in item:
+                        return item["text"].strip()
+            except Exception:
+                pass
+
+        # 3) Fallback: convert resp to string
+        return str(resp)
+
     except Exception as e:
-        print("[AI V2 ERROR]", e)
-        return f"⚠️ AI error: {e}"
+        print(f"[AI V2 ERROR] {e}")
+        return f"⚠️ AI V2 error: `{e}`"
+
 
 @bot.tree.command(name="loa_plus", description="Advanced LOA generator with formative assessment.")
 @app_commands.describe(
