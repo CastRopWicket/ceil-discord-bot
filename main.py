@@ -2141,10 +2141,56 @@ init_openai()
 # AI V2 — Unified Response Helper
 # ============================
 
+# ============================================
+# AI V2 CORE HELPERS (LOA+, PD+, REPORT+)
+# ============================================
+
+def _ai_v2_system_prompt(kind: str) -> str:
+    """
+    Central place for system prompts for the upgraded teacher tools.
+    kind: "loa", "pd", "report", or anything else -> generic.
+    """
+    kind = (kind or "").lower()
+
+    if kind == "loa":
+        return (
+            "You are an expert in Learning Oriented Assessment (LOA) in higher education.\n"
+            "- You design assessment tasks that generate evidence for learning, not just grading.\n"
+            "- You align tasks with learning outcomes and CEFR/academic descriptors.\n"
+            "- You give analytic, criterion-based feedback with concrete, observable behaviours.\n"
+            "- You propose follow-up activities that help students self-regulate and progress.\n"
+            "Output must be structured, clear, and directly usable by a teacher in class."
+        )
+
+    if kind == "pd":
+        return (
+            "You are an expert in teacher professional development and reflective practice.\n"
+            "- You help teachers reflect on their practice, identify strengths, and plan realistic PD goals.\n"
+            "- You use frameworks like TPACK, classroom management, assessment literacy, and CLIL.\n"
+            "- You suggest concrete, time-bound actions and low-prep ideas the teacher can actually implement.\n"
+            "Output must be practical, structured in sections, and focused on growth, not judgement."
+        )
+
+    if kind == "report":
+        return (
+            'You are an academic writing assistant specialized in short, focused "learning reports".\n'
+            "- You turn raw notes about students, lessons, or research into concise, professional reports.\n"
+            "- You keep a neutral, evidence-based tone; no exaggeration and no vague claims.\n"
+            "- You structure the report with headings, bullet points, and clear next steps.\n"
+            "If the user mentions students, you protect privacy (no unnecessary sensitive details)."
+        )
+
+    # Fallback generic system
+    return (
+        "You are a precise, concise academic assistant. "
+        "Always respond with clear structure (headings, bullets) and avoid empty filler."
+    )
+
+
 async def ai_v2_generate(system_prompt: str, user_prompt: str, model: str = "gpt-4.1-mini") -> str:
     """
-    Unified helper for LOA+, PD+, REPORT+ with universal output extraction.
-    Works with all OpenAI Responses API formats without raising subscript errors.
+    Low-level helper: actually calls the OpenAI Responses API and extracts text robustly.
+    This is shared by LOA+, PD+, REPORT+, etc.
     """
     if openai_client is None:
         return "⚠️ AI engine not initialized."
@@ -2162,33 +2208,52 @@ async def ai_v2_generate(system_prompt: str, user_prompt: str, model: str = "gpt
             ],
         )
 
-        # ---------- UNIVERSAL EXTRACTION ----------
-        # 1) If the SDK provided flat output_text (most common)
-        if hasattr(resp, "output_text") and resp.output_text:
-            return resp.output_text.strip()
+        # ----- UNIVERSAL OUTPUT EXTRACTION -----
 
-        # 2) Try to parse resp.output safely
+        # 1) Most common: flat output_text
+        if hasattr(resp, "output_text") and resp.output_text:
+            try:
+                return resp.output_text.strip()
+            except Exception:
+                return str(resp.output_text).strip()
+
+        # 2) Structured output: resp.output[0].content[...]
         if hasattr(resp, "output") and resp.output:
             out = resp.output
-
-            # Formats:
-            #   output = [ { "content": [ { "type": "output_text", "text": "..."} ] } ]
             try:
-                content = out[0].content
-                for item in content:
-                    if hasattr(item, "text"):
-                        return item.text.strip()
-                    if isinstance(item, dict) and "text" in item:
-                        return item["text"].strip()
+                first = out[0]
+                # handle both object and dict
+                content = getattr(first, "content", None)
+                if content is None and isinstance(first, dict):
+                    content = first.get("content")
+
+                if content:
+                    for item in content:
+                        # object-style
+                        if hasattr(item, "text") and item.text:
+                            return item.text.strip()
+                        # dict-style
+                        if isinstance(item, dict) and "text" in item and item["text"]:
+                            return str(item["text"]).strip()
             except Exception:
                 pass
 
-        # 3) Fallback: convert resp to string
+        # 3) Last resort: string representation
         return str(resp)
 
     except Exception as e:
         print(f"[AI V2 ERROR] {e}")
         return f"⚠️ AI V2 error: `{e}`"
+
+
+async def ai_v2(user_prompt: str, system: str = "generic", model: str = "gpt-4.1-mini") -> str:
+    """
+    High-level helper used by commands:
+      await ai_v2(prompt, system="loa" | "pd" | "report")
+    """
+    sys_prompt = _ai_v2_system_prompt(system)
+    return await ai_v2_generate(sys_prompt, user_prompt, model=model)
+
 
 
 @bot.tree.command(name="loa_plus", description="Advanced LOA generator with formative assessment.")
