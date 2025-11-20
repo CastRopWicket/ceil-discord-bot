@@ -4807,6 +4807,16 @@ class DashboardSectionSelect(Select):
             desc = "Status of Google integrations:\n\n" + get_google_status_summary()
             embed = dashboard_embed("🟩 Google Center", desc, color=discord.Color.green())
 
+        else:
+            # fallback to home
+            view = DashboardMainView()
+            embed = dashboard_embed(
+                "🛠️ CEIL ADMIN DASHBOARD V3",
+                "Unexpected section, returning to main menu.",
+            )
+
+        await interaction.response.edit_message(embed=embed, view=view)
+        
         elif selected == "teacher":
             embed = dashboard_embed(
                 "📘 Teacher Suite (V2)",
@@ -4817,17 +4827,6 @@ class DashboardSectionSelect(Select):
     )
             
     await interaction.response.edit_message(embed=embed, view=TeacherSuiteView())
-            
-        else:
-            # fallback to home
-            view = DashboardMainView()
-            embed = dashboard_embed(
-                "🛠️ CEIL ADMIN DASHBOARD V3",
-                "Unexpected section, returning to main menu.",
-            )
-
-        await interaction.response.edit_message(embed=embed, view=view)
-
 
 class RefreshButton(Button):
     def __init__(self):
