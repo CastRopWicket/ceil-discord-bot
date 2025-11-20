@@ -2161,7 +2161,7 @@ async def ai_generate_response(prompt: str) -> str:
 ###############################################################
 # LOA+  — Learning Oriented Assessment Generator (UPGRADED)
 ###############################################################
-@tree.command(name="loa_plus", description="Generate a full LOA package (criteria + tasks + progression).")
+@bot.tree.command(name="loa_plus", description="Generate a full LOA package (criteria + tasks + progression).")
 async def loa_plus_slash(interaction: discord.Interaction, topic: str):
     await interaction.response.defer(ephemeral=True)
 
@@ -2188,7 +2188,7 @@ Produce clear markdown formatting.
 ###############################################################
 # PD+  — Professional Development Generator (UPGRADED)
 ###############################################################
-@tree.command(name="pd_plus", description="Generate a full professional development enhancement plan.")
+@bot.tree.command(name="pd_plus", description="Generate a full professional development enhancement plan.")
 async def pd_plus_slash(interaction: discord.Interaction, teacher_need: str):
     await interaction.response.defer(ephemeral=True)
 
@@ -2218,7 +2218,7 @@ Produce detailed, structured output in markdown.
 ###############################################################
 # REPORT+ — Upgraded Student Report Generator (UPGRADED)
 ###############################################################
-@tree.command(name="report_plus", description="Generate a complete performance report.")
+@bot.tree.command(name="report_plus", description="Generate a complete performance report.")
 async def report_plus_slash(interaction: discord.Interaction, student_name: str, skill: str):
     await interaction.response.defer(ephemeral=True)
 
