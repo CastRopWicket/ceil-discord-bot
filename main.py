@@ -2087,6 +2087,7 @@ async def observation_form_slash(
     text = await teacher_llm(prompt)
     await interaction.followup.send(text)
 
+    
 # ============================================================
 # SAFE WRAPPER: call_ai_simple()
 # Makes new V2 commands use your existing AI engine.
@@ -2111,52 +2112,54 @@ async def ai_generate(user, title: str, instruction: str):
         print(f"[AI V2 ERROR] {title}:", e)
         return f"❌ AI processing failed in **{title}**."
 
-###########################################################
-# GLOBAL AI HELPER FOR ALL V2 MODULES (LOA, PD, REPORT...)
-###########################################################
+# ==========================================
+# OPENAI CLIENT (AI V2 SAFE INITIALIZATION)
+# ==========================================
+from openai import OpenAI
 
-###############################################################
-# UNIVERSAL AI CALL — CLEAN + SAFE
-###############################################################
+client = None
 
-async def ai_generate_response(prompt: str) -> str:
-    """Central AI call used by LOA+, PD+, REPORT+."""
+def init_openai():
+    global client, OPENAI_API_KEY
+
+    if not OPENAI_API_KEY or OPENAI_API_KEY.strip() == "":
+        print("[AI V2 ERROR] OPENAI_API_KEY is missing or empty.")
+        return False
+
+    try:
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        print("✅ AI V2: OpenAI client initialized.")
+        return True
+    except Exception as e:
+        print(f"[AI V2 ERROR] Failed to initialize OpenAI client: {e}")
+        return False
+
+# run initialization now
+init_openai()
+
+# ==========================================
+# AI V2 UNIVERSAL HELPER (LOA+, PD+, REPORT+)
+# ==========================================
+async def ai_v2_generate(system_msg: str, user_msg: str) -> str:
+    global client
+
     if client is None:
         return "[AI V2 ERROR] OpenAI client not initialized."
 
     try:
-        resp = client.chat.completions.create(
+        response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are an expert educational AI producing structured, accurate content."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg},
             ],
-            max_tokens=1500,
             temperature=0.4
         )
-        return resp.choices[0].message.content
+        return response.choices[0].message["content"]
 
     except Exception as e:
-        return f"[AI V2 ERROR] {type(e).__name__}: {e}"
-
-###############################################################
-# UNIVERSAL AI CALL — CLEAN + SAFE
-###############################################################
-async def ai_generate_response(prompt: str) -> str:
-    """Central AI call used by LOA+, PD+, REPORT+."""
-    try:
-        resp = await openai.ChatCompletion.acreate(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are an expert educational AI. Produce clear, structured, pedagogically correct outputs."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.4,
-        )
-        return resp["choices"][0]["message"]["content"]
-    except Exception as e:
-        return f"[AI V2 ERROR] {type(e).__name__}: {e}"
-
+        print(f"[AI V2 ERROR] {e}")
+        return f"[AI V2 ERROR] {e}"
 
 ###############################################################
 # LOA+  — Learning Oriented Assessment Generator (UPGRADED)
