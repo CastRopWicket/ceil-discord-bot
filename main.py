@@ -9,6 +9,13 @@ from googleapiclient.discovery import build
 import base64
 import json
 
+# ===============================
+# LOAD ENV KEYS (fix ordering)
+# ===============================
+import os
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 
 import os
 import json
@@ -25,16 +32,30 @@ from openai import OpenAI
 from discord.ui import View, Button, Select
 from discord import SelectOption
 
-# ==========================
-# OPENAI CLIENT (AI V2 FIX)
-# ==========================
-try:
-    from openai import OpenAI
-    client = OpenAI(api_key=OPENAI_API_KEY)
-except Exception as e:
-    print(f"[AI INIT ERROR] {e}")
-    client = None
+# ==========================================
+# OPENAI CLIENT (AI V2 SAFE INITIALIZATION)
+# ==========================================
+from openai import OpenAI
 
+client = None
+
+def init_openai():
+    global client, OPENAI_API_KEY
+
+    if not OPENAI_API_KEY or OPENAI_API_KEY.strip() == "":
+        print("[AI V2 ERROR] OPENAI_API_KEY is missing or empty.")
+        return False
+
+    try:
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        print("✅ AI V2: OpenAI client initialized.")
+        return True
+    except Exception as e:
+        print(f"[AI V2 ERROR] Failed to initialize OpenAI client: {e}")
+        return False
+
+# run initialization now
+init_openai()
 
 
 # =============== GOOGLE CENTER BASE CONFIG ==================
@@ -2119,10 +2140,12 @@ async def ai_generate_response(prompt: str) -> str:
         return f"[AI V2 ERROR] {type(e).__name__}: {e}"
 
 # ==========================================
-# AI V2 UNIVERSAL HELPER – FIXED & CLEAN
+# AI V2 UNIVERSAL HELPER (LOA+, PD+, REPORT+)
 # ==========================================
+
 async def ai_v2_generate(system_msg: str, user_msg: str) -> str:
-    """Stable AI generator for LOA+, PD+, REPORT+ and all academic tools."""
+    global client
+
     if client is None:
         return "[AI V2 ERROR] OpenAI client not initialized."
 
@@ -2136,6 +2159,7 @@ async def ai_v2_generate(system_msg: str, user_msg: str) -> str:
             temperature=0.4
         )
         return response.choices[0].message["content"]
+
     except Exception as e:
         print(f"[AI V2 ERROR] {e}")
         return f"[AI V2 ERROR] {e}"
