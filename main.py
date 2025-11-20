@@ -2199,26 +2199,28 @@ def _ai_v2_system_prompt(kind: str) -> str:
     )
 
 
-async def ai_v2_generate(system_prompt: str, user_prompt: str, model: str = "gpt-4.1-mini") -> str:
-    """
-    Low-level helper: actually calls the OpenAI Responses API and extracts text robustly.
-    This is shared by LOA+, PD+, REPORT+, etc.
-    """
-    if openai_client is None:
-        return "⚠️ AI engine not initialized."
-
+async def ai_v2_generate(system_msg: str, user_msg: str, model: str = AI_V2_MODEL):
+    """Unified AI V2 generator with system and user messages."""
     try:
+        if openai_client is None:
+            return "[AI V2 ERROR] OpenAI client not initialized."
+
         resp = openai_client.responses.create(
             model=model,
-            reasoning={"effort": "medium"},
-            max_output_tokens=1400,
-            temperature=0.4,
-            top_p=0.9,
             input=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg}
+            ]
         )
+
+        # Extract the text output
+        try:
+            return resp.output[0].content[0].text
+        except Exception:
+            return "[AI V2 ERROR] Couldn't parse AI response."
+
+    except Exception as e:
+        return f"[AI V2 ERROR] {e}"
 
         # ----- UNIVERSAL OUTPUT EXTRACTION -----
 
