@@ -24,20 +24,17 @@ from discord import app_commands
 from openai import OpenAI
 from discord.ui import View, Button, Select
 from discord import SelectOption
+
+# ==========================
+# OPENAI CLIENT (AI V2 FIX)
+# ==========================
 try:
     from openai import OpenAI
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-    if not OPENAI_API_KEY:
-        print("⚠️ No OPENAI_API_KEY environment variable found.")
-        client = None
-    else:
-        client = OpenAI(api_key=OPENAI_API_KEY)
-        print("✅ OpenAI client initialized.")
-
+    client = OpenAI(api_key=OPENAI_API_KEY)
 except Exception as e:
-    print(f"❌ Failed to initialize OpenAI: {e}")
+    print(f"[AI INIT ERROR] {e}")
     client = None
+
 
 
 # =============== GOOGLE CENTER BASE CONFIG ==================
@@ -2121,23 +2118,27 @@ async def ai_generate_response(prompt: str) -> str:
     except Exception as e:
         return f"[AI V2 ERROR] {type(e).__name__}: {e}"
 
-###############################################################
-# UNIVERSAL AI CALL — CLEAN + SAFE
-###############################################################
-async def ai_generate_response(prompt: str) -> str:
-    """Central AI call used by LOA+, PD+, REPORT+."""
+# ==========================================
+# AI V2 UNIVERSAL HELPER – FIXED & CLEAN
+# ==========================================
+async def ai_v2_generate(system_msg: str, user_msg: str) -> str:
+    """Stable AI generator for LOA+, PD+, REPORT+ and all academic tools."""
+    if client is None:
+        return "[AI V2 ERROR] OpenAI client not initialized."
+
     try:
-        resp = await openai.ChatCompletion.acreate(
+        response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are an expert educational AI. Produce clear, structured, pedagogically correct outputs."},
-                {"role": "user", "content": prompt},
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg},
             ],
-            temperature=0.4,
+            temperature=0.4
         )
-        return resp["choices"][0]["message"]["content"]
+        return response.choices[0].message["content"]
     except Exception as e:
-        return f"[AI V2 ERROR] {type(e).__name__}: {e}"
+        print(f"[AI V2 ERROR] {e}")
+        return f"[AI V2 ERROR] {e}"
 
 
 ###############################################################
