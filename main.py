@@ -4815,6 +4815,7 @@ class DashboardSectionSelect(Select):
                 "- **/pd_plus** — Teacher Professional Development (V2)\n"
                 "- **/report_plus** — Professional academic reports (V2)"
     )
+            
     await interaction.response.edit_message(embed=embed, view=TeacherSuiteView())
             
         else:
