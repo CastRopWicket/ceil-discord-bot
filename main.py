@@ -57,7 +57,19 @@ def init_openai():
 # run initialization now
 init_openai()
 
+# =======================================
+# OPENAI CLIENT (GLOBAL)
+# =======================================
 
+from openai import OpenAI
+
+# Make sure OPENAI_API_KEY already exists in your env/config handling
+try:
+    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+except Exception as e:
+    print("[AI V2 ERROR] Failed to initialize OpenAI client:", e)
+    openai_client = None
+    
 # =============== GOOGLE CENTER BASE CONFIG ==================
 
 import base64
