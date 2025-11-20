@@ -4806,18 +4806,17 @@ class DashboardSectionSelect(Select):
             view = GoogleSettingsView()
             desc = "Status of Google integrations:\n\n" + get_google_status_summary()
             embed = dashboard_embed("🟩 Google Center", desc, color=discord.Color.green())
-            
+
         elif selected == "teacher":
-    embed = dashboard_embed(
-        "📘 Teacher Suite (V2)",
-        "Tools available:\n"
-        "- **/loa_plus** — Learning-Oriented Assessment (V2)\n"
-        "- **/pd_plus** — Teacher Professional Development (V2)\n"
-        "- **/report_plus** — Professional academic reports (V2)"
+            embed = dashboard_embed(
+                "📘 Teacher Suite (V2)",
+                "Tools available:\n"
+                "- **/loa_plus** — Learning-Oriented Assessment (V2)\n"
+                "- **/pd_plus** — Teacher Professional Development (V2)\n"
+                "- **/report_plus** — Professional academic reports (V2)"
     )
     await interaction.response.edit_message(embed=embed, view=TeacherSuiteView())
-
-
+            
         else:
             # fallback to home
             view = DashboardMainView()
