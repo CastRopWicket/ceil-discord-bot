@@ -69,6 +69,33 @@ try:
 except Exception as e:
     print("[AI V2 ERROR] Failed to initialize OpenAI client:", e)
     openai_client = None
+
+###############################################
+# DISCORD SAFE SEND (AUTO SPLIT OVER 2000 CHARS)
+###############################################
+
+async def safe_send(interaction, text: str):
+    """Auto-splits long messages into multiple Discord-safe chunks."""
+    MAX_LEN = 1900   # keep under 2000 with padding
+
+    if len(text) <= MAX_LEN:
+        return await interaction.followup.send(text)
+
+    # Split cleanly by paragraphs
+    parts = []
+    while len(text) > MAX_LEN:
+        split_at = text.rfind("\n", 0, MAX_LEN)
+        if split_at == -1:
+            split_at = MAX_LEN
+        parts.append(text[:split_at])
+        text = text[split_at:]
+
+    parts.append(text)
+
+    # send sequentially
+    for p in parts:
+        await interaction.followup.send(p)
+
     
 # =============== GOOGLE CENTER BASE CONFIG ==================
 
@@ -2306,7 +2333,7 @@ async def loa_plus_slash(interaction: discord.Interaction, topic: str, level: st
     )
 
     response = await ai_v2(prompt, system="loa")
-    await interaction.followup.send(response)
+    await safe_send(interaction, response)
 
 @bot.tree.command(name="pd_plus", description="Generate teacher professional development content.")
 @app_commands.describe(
@@ -2325,7 +2352,7 @@ async def pd_plus_slash(interaction: discord.Interaction, focus: str):
     )
 
     response = await ai_v2(prompt, system="pd")
-    await interaction.followup.send(response)
+    await safe_send(interaction, response)
 
 
 @bot.tree.command(name="report_plus", description="Generate professional educational reports.")
@@ -2349,7 +2376,7 @@ async def report_plus_slash(interaction: discord.Interaction, student: str, issu
     )
 
     response = await ai_v2(prompt, system="report")
-    await interaction.followup.send(response)
+    await safe_send(interaction, response)
 
 ###############################################################
 # AI TUTOR MODE — LEARNER-ORIENTED MINI LESSONS
