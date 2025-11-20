@@ -4026,21 +4026,6 @@ async def admin_dashboard_v3_slash(interaction: discord.Interaction):
     view = DashboardV3View()
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-elif selected == "teacher":
-    embed = dashboard_embed(
-        "📘 Teacher Suite (V2)",
-        "Tools available:\n"
-        "- **/loa_plus** — Learning-Oriented Assessment (V2)\n"
-        "- **/pd_plus** — Teacher Professional Development (V2)\n"
-        "- **/report_plus** — Professional academic reports (V2)"
-    )
-    await interaction.response.edit_message(embed=embed, view=TeacherSuiteView())
-
-class TeacherSuiteView(View):
-    def __init__(self):
-        super().__init__(timeout=180)
-        self.add_item(BackToMainButton())
-
 
 ###############################################################
 # COINS SLASH COMMANDS
@@ -4821,6 +4806,17 @@ class DashboardSectionSelect(Select):
             view = GoogleSettingsView()
             desc = "Status of Google integrations:\n\n" + get_google_status_summary()
             embed = dashboard_embed("🟩 Google Center", desc, color=discord.Color.green())
+            
+        elif selected == "teacher":
+    embed = dashboard_embed(
+        "📘 Teacher Suite (V2)",
+        "Tools available:\n"
+        "- **/loa_plus** — Learning-Oriented Assessment (V2)\n"
+        "- **/pd_plus** — Teacher Professional Development (V2)\n"
+        "- **/report_plus** — Professional academic reports (V2)"
+    )
+    await interaction.response.edit_message(embed=embed, view=TeacherSuiteView())
+
 
         else:
             # fallback to home
@@ -4863,6 +4859,12 @@ class CloseDashboardButton(Button):
             emoji="❌",   # fixed emoji
             row=1
         )
+        
+class TeacherSuiteView(View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        self.add_item(BackToMainButton())
+
 
     async def callback(self, interaction: discord.Interaction):
         if not await ensure_admin_interaction(interaction):
