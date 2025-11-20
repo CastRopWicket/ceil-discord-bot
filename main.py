@@ -2156,7 +2156,23 @@ init_openai()
 # ============================================
 # AI V2 CORE HELPERS (LOA+, PD+, REPORT+)
 # ============================================
+###############################################
+# AI V2 CONFIG (GLOBAL)
+###############################################
 
+# Your preferred default AI model:
+AI_V2_MODEL = "gpt-4.1"        # or "gpt-4.1-mini" or your custom model
+AI_V2_TEMPERATURE = 0.4        # Low = more academic/reliable
+AI_V2_MAX_TOKENS = 4096
+
+# Make sure client exists
+openai_client = None
+try:
+    from openai import OpenAI
+    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+except Exception as e:
+    print("[AI V2 ERROR] Failed to initialize OpenAI client:", e) 
+    
 def _ai_v2_system_prompt(kind: str) -> str:
     """
     Central place for system prompts for the upgraded teacher tools.
