@@ -2985,14 +2985,16 @@ for cmd_name in ["hangman", "guess", "blackjack", "hit", "stand", "trivia", "ans
 # 32. BLACKJACK FULL ENGINE + COINS INTEGRATION
 ###############################################################
 
-blackjack_sessions: dict[int, dict] = {}  # user_id -> {player, dealer, bet}
+import discord
+from discord.ext import commands
+import random
 
+blackjack_sessions: dict[int, dict] = {}  # user_id -> {player: list, dealer: list, bet: int, message: discord.Message}
 
 def bj_draw_card():
     ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
     suits = ["♠", "♥", "♦", "♣"]
     return random.choice(ranks), random.choice(suits)
-
 
 def bj_hand_value(cards):
     total = 0
@@ -3010,10 +3012,11 @@ def bj_hand_value(cards):
         aces -= 1
     return total
 
-
 def bj_format(cards):
     return " ".join(f"{r}{s}" for r, s in cards)
 
+def is_blackjack(cards):
+    return len(cards) == 2 and bj_hand_value(cards) == 21
 
 @bot.command(name="blackjack")
 async def blackjack_cmd(ctx: commands.Context, bet: int = 10):
@@ -3035,91 +3038,153 @@ async def blackjack_cmd(ctx: commands.Context, bet: int = 10):
             mention_author=False,
         )
 
-    # Reserve the bet up-front (so they can't run with the money)
+    # Reserve the bet up-front
     add_coins(uid, -bet)
 
     player = [bj_draw_card(), bj_draw_card()]
     dealer = [bj_draw_card(), bj_draw_card()]
+    pv = bj_hand_value(player)
+    dv = bj_hand_value(dealer)
+
+    # Check for natural blackjack
+    if is_blackjack(player):
+        if is_blackjack(dealer):
+            # Push: refund bet
+            add_coins(uid, bet)
+            msg_content = (
+                f"🃏 **Blackjack** (bet: **{bet}** coins)\n\n"
+                f"**Your hand:** {bj_format(player)} (Blackjack!)\n"
+                f"**Dealer hand:** {bj_format(dealer)} (Blackjack!)\n\n"
+                "➖ **Push (both blackjacks).** Your bet has been refunded.\n"
+                f"Current balance: **{get_coins(uid)}** coins."
+            )
+        else:
+            # Player wins 3:2
+            winnings = int(bet * 1.5)
+            add_coins(uid, bet + winnings)
+            msg_content = (
+                f"🃏 **Blackjack** (bet: **{bet}** coins)\n\n"
+                f"**Your hand:** {bj_format(player)} (Blackjack!)\n"
+                f"**Dealer shows:** {bj_format([dealer[0]])}\n\n"
+                f"🎉 **Natural Blackjack! You win {winnings} coins!**\n"
+                f"Current balance: **{get_coins(uid)}** coins."
+            )
+        await ctx.reply(msg_content, mention_author=False)
+        return
+
     blackjack_sessions[uid] = {"player": player, "dealer": dealer, "bet": bet}
 
-    msg = (
+    msg_content = (
         f"🃏 **Blackjack** (bet: **{bet}** coins)\n\n"
-        f"**Your hand:** {bj_format(player)} (value: {bj_hand_value(player)})\n"
+        f"**Your hand:** {bj_format(player)} (value: {pv})\n"
         f"**Dealer shows:** {bj_format([dealer[0]])}\n\n"
-        "Type `!hit` to draw or `!stand` to hold."
+        "React with 👊 to **Hit**, 🛑 to **Stand**, 💰 to **Double**."
     )
 
-    await ctx.reply(msg, mention_author=False)
+    msg = await ctx.reply(msg_content, mention_author=False)
+    await msg.add_reaction("👊")
+    await msg.add_reaction("🛑")
+    await msg.add_reaction("💰")
+    blackjack_sessions[uid]["message"] = msg
 
-
-@bot.command(name="hit")
-async def blackjack_hit_cmd(ctx: commands.Context):
-    uid = ctx.author.id
+@bot.event
+async def on_reaction_add(reaction, user):
+    if user.bot:
+        return
+    uid = user.id
     if uid not in blackjack_sessions:
-        return await ctx.reply("No active blackjack game. Start one with `!blackjack <bet>`.")
+        return
+    session = blackjack_sessions[uid]
+    if reaction.message.id != session["message"].id:
+        return
 
-    game = blackjack_sessions[uid]
-    game["player"].append(bj_draw_card())
-    val = bj_hand_value(game["player"])
+    emoji = str(reaction.emoji)
+    await reaction.remove(user)  # Remove reaction to allow re-reacting
 
-    if val > 21:
-        # player busts -> lose bet (already deducted)
-        bet = game.get("bet", 0)
-        blackjack_sessions.pop(uid, None)
-        msg = (
-            f"💥 **Bust!**\n"
-            f"Your hand: {bj_format(game['player'])} ({val})\n"
-            f"You lose your bet of **{bet}** coins.\n"
-            f"New balance: **{get_coins(uid)}** coins."
-        )
-    else:
-        msg = (
-            f"Your hand: {bj_format(game['player'])} (value: {val})\n"
-            "Type `!hit` or `!stand`."
-        )
+    player = session["player"]
+    dealer = session["dealer"]
+    bet = session["bet"]
+    msg = session["message"]
 
-    await ctx.reply(msg, mention_author=False)
+    if emoji == "👊":  # Hit
+        player.append(bj_draw_card())
+        pv = bj_hand_value(player)
+        if pv > 21:
+            # Bust
+            blackjack_sessions.pop(uid, None)
+            new_content = (
+                f"🃏 **Blackjack** (bet: **{bet}** coins)\n\n"
+                f"**Your hand:** {bj_format(player)} ({pv}) - 💥 **Bust!**\n"
+                f"**Dealer shows:** {bj_format([dealer[0]])}\n\n"
+                f"❌ You lose your bet of **{bet}** coins.\n"
+                f"Current balance: **{get_coins(uid)}** coins."
+            )
+            await msg.edit(content=new_content)
+        else:
+            new_content = (
+                f"🃏 **Blackjack** (bet: **{bet}** coins)\n\n"
+                f"**Your hand:** {bj_format(player)} (value: {pv})\n"
+                f"**Dealer shows:** {bj_format([dealer[0]])}\n\n"
+                "React with 👊 to **Hit**, 🛑 to **Stand**, 💰 to **Double**."
+            )
+            await msg.edit(content=new_content)
 
+    elif emoji == "🛑":  # Stand
+        await resolve_game(session, msg)
 
-@bot.command(name="stand")
-async def blackjack_stand_cmd(ctx: commands.Context):
-    uid = ctx.author.id
-    if uid not in blackjack_sessions:
-        return await ctx.reply("No active blackjack game. Start with `!blackjack <bet>`.")
+    elif emoji == "💰":  # Double
+        balance = get_coins(uid)
+        if balance < bet:
+            # Can't double
+            new_content = (
+                f"🃏 **Blackjack** (bet: **{bet}** coins)\n\n"
+                f"**Your hand:** {bj_format(player)} (value: {bj_hand_value(player)})\n"
+                f"**Dealer shows:** {bj_format([dealer[0]])}\n\n"
+                "❌ Not enough coins to double. React with 👊 to **Hit** or 🛑 to **Stand**."
+            )
+            await msg.edit(content=new_content)
+            return
+        # Deduct extra bet
+        add_coins(uid, -bet)
+        session["bet"] = bet * 2
+        # Draw one card and stand
+        player.append(bj_draw_card())
+        await resolve_game(session, msg)
 
-    game = blackjack_sessions[uid]
-    dealer = game["dealer"]
-    player = game["player"]
-    bet = game.get("bet", 0)
+async def resolve_game(session, msg):
+    uid = list(blackjack_sessions.keys())[list(blackjack_sessions.values()).index(session)]
+    player = session["player"]
+    dealer = session["dealer"]
+    bet = session["bet"]
 
+    # Dealer draws to 17+
     while bj_hand_value(dealer) < 17:
         dealer.append(bj_draw_card())
 
     pv = bj_hand_value(player)
     dv = bj_hand_value(dealer)
 
-    msg = (
+    result_msg = (
+        f"🃏 **Blackjack** (bet: **{bet}** coins)\n\n"
         f"**Your hand:** {bj_format(player)} ({pv})\n"
         f"**Dealer hand:** {bj_format(dealer)} ({dv})\n\n"
     )
 
     if dv > 21 or pv > dv:
-        # win -> we already removed bet; pay 2 * bet back
+        # Win
         add_coins(uid, bet * 2)
-        msg += f"🎉 **You win!** You earn **{bet}** net coins.\n"
+        result_msg += f"🎉 **You win!** You earn **{bet}** net coins.\n"
     elif pv == dv:
-        # push -> refund bet
+        # Push
         add_coins(uid, bet)
-        msg += "➖ **Push (draw).** Your bet has been refunded.\n"
+        result_msg += "➖ **Push (draw).** Your bet has been refunded.\n"
     else:
-        # lose -> bet was already taken
-        msg += "❌ **Dealer wins.** You lose your bet.\n"
+        # Lose
+        result_msg += "❌ **Dealer wins.** You lose your bet.\n"
 
-    new_balance = get_coins(uid)
-    msg += f"Current balance: **{new_balance}** coins."
-
+    result_msg += f"Current balance: **{get_coins(uid)}** coins."
+    await msg.edit(content=result_msg)
     blackjack_sessions.pop(uid, None)
-    await ctx.reply(msg, mention_author=False)
 
 
 ###############################################################
